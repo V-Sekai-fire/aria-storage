@@ -43,8 +43,7 @@ defmodule AriaStorage.MixProject do
       {:finch, "~> 0.16"},
       {:httpoison, "~> 1.8"},
 
-      # Compression
-      {:ezstd, "~> 1.0"},
+      # Compression - using built-in :zstd module from Erlang/OTP 28+
 
       # JSON handling
       {:jason, "~> 1.4"},

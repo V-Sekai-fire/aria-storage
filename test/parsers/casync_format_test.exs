@@ -562,7 +562,7 @@ defmodule AriaStorage.Parsers.CasyncFormatTest do
                   assert compression in [:none, :zstd, :unknown]
 
                 {:error, "Invalid chunk file magic"} ->
-                  case :ezstd.decompress(data) do
+                  case :zstd.decompress(data) do
                     decompressed when is_binary(decompressed) ->
                       assert byte_size(decompressed) > 0
 

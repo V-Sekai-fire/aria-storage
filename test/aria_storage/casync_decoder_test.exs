@@ -22,7 +22,7 @@ defmodule AriaStorage.CasyncDecoderTest do
   describe("chunk decompression") do
     test "decompresses ZSTD compressed chunk data correctly" do
       original_data = "Hello, World!"
-      compressed_data = :ezstd.compress(original_data)
+      compressed_data = :zstd.compress(original_data)
       result = decompress_test_data(compressed_data, :zstd)
       assert {:ok, decompressed} = result
       assert decompressed == original_data
@@ -217,7 +217,7 @@ defmodule AriaStorage.CasyncDecoderTest do
       test_data = "Raw chunk data without CACNK wrapper"
       chunk_id = Chunks.calculate_chunk_id(test_data)
       chunk_id_hex = Base.encode16(chunk_id, case: :lower)
-      compressed_data = :ezstd.compress(test_data)
+      compressed_data = :zstd.compress(test_data)
       chunk_info = %{chunk_id: chunk_id, size: byte_size(test_data)}
       result = decompress_and_verify_test_chunk(compressed_data, chunk_info, chunk_id_hex)
       assert {:ok, verified_data} = result
@@ -286,7 +286,7 @@ defmodule AriaStorage.CasyncDecoderTest do
   defp decompress_test_data(data, compression) do
     case compression do
       :zstd ->
-        case :ezstd.decompress(data) do
+        case :zstd.decompress(data) do
           result when is_binary(result) -> {:ok, result}
           error -> {:error, {:zstd_error, error}}
         end
@@ -300,7 +300,7 @@ defmodule AriaStorage.CasyncDecoderTest do
   end
 
   defp process_real_chunk(chunk_data, _chunk_id, _chunk_id_hex) do
-    case :ezstd.decompress(chunk_data) do
+    case :zstd.decompress(chunk_data) do
       decompressed_data when is_binary(decompressed_data) ->
         {:ok, decompressed_data}
 

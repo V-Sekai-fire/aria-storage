@@ -441,7 +441,7 @@ defmodule AriaStorage.CasyncDecoder do
   end
 
   defp decompress_chunk_data(data, :zstd) do
-    case :ezstd.decompress(data) do
+    case :zstd.decompress(data) do
       result when is_binary(result) -> {:ok, result}
       error -> {:error, {:zstd_error, error}}
     end

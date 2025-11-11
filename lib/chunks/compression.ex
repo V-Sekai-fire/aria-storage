@@ -11,7 +11,7 @@ defmodule AriaStorage.Chunks.Compression do
     case algorithm do
       :zstd ->
         try do
-          compressed = :ezstd.compress(data, 1)
+          compressed = :zstd.compress(data, %{compression_level: 1})
           {:ok, compressed}
         rescue
           UndefinedFunctionError -> {:error, :compression_not_available}
@@ -33,7 +33,7 @@ defmodule AriaStorage.Chunks.Compression do
     case algorithm do
       :zstd ->
         try do
-          decompressed = :ezstd.decompress(compressed_data)
+          decompressed = :zstd.decompress(compressed_data)
           {:ok, decompressed}
         rescue
           UndefinedFunctionError -> {:error, :compression_not_available}
@@ -53,7 +53,7 @@ defmodule AriaStorage.Chunks.Compression do
   @spec compression_available?(compression_algorithm()) :: boolean()
   def compression_available?(:zstd) do
     try do
-      :ezstd.compress("test", 1)
+      :zstd.compress("test", %{compression_level: 1})
       true
     rescue
       UndefinedFunctionError -> false
