@@ -14,7 +14,7 @@ defmodule AriaStorage.CasyncDecoderTest do
   setup do
     File.rm_rf!(@test_output_dir)
     File.mkdir_p!(@test_output_dir)
-    Application.ensure_all_started(:hackney)
+    # Req doesn't require explicit application start
     Application.ensure_all_started(:ssl)
     :ok
   end
