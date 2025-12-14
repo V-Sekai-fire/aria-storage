@@ -456,18 +456,14 @@ defmodule AriaStorage.CasyncDecoder do
   end
 
   defp download_file(url) do
-    Application.ensure_all_started(:hackney)
-    Application.ensure_all_started(:ssl)
-
-    case HTTPoison.get(url, [],
-           timeout: 300_000,
-           recv_timeout: 300_000,
-           follow_redirect: true,
-           max_redirect: 5
+    case Req.get(url,
+           receive_timeout: 300_000,
+           retry: :transient,
+           max_redirects: 5
          ) do
-      {:ok, %HTTPoison.Response{status_code: 200, body: body}} -> {:ok, body}
-      {:ok, %HTTPoison.Response{status_code: status_code}} -> {:error, "HTTP #{status_code}"}
-      {:error, %HTTPoison.Error{reason: reason}} -> {:error, reason}
+      {:ok, %{status: 200, body: body}} -> {:ok, body}
+      {:ok, %{status: status_code}} -> {:error, "HTTP #{status_code}"}
+      {:error, reason} -> {:error, reason}
     end
   end
 end

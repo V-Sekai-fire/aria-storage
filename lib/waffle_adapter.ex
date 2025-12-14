@@ -150,9 +150,9 @@ defmodule AriaStorage.WaffleAdapter do
   end
 
   defp download_from_url(url) do
-    case HTTPoison.get(url) do
-      {:ok, %{status_code: 200, body: body}} -> {:ok, body}
-      {:ok, %{status_code: status}} -> {:error, {:http_error, status}}
+    case Req.get(url, retry: :transient) do
+      {:ok, %{status: 200, body: body}} -> {:ok, body}
+      {:ok, %{status: status}} -> {:error, {:http_error, status}}
       {:error, reason} -> {:error, {:http_request_failed, reason}}
     end
   end
