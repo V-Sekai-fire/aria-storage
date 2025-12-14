@@ -37,11 +37,10 @@ defmodule AriaStorage.MixProject do
       {:waffle_ecto, "~> 0.0.11"},
       {:ex_aws, "~> 2.4"},
       {:ex_aws_s3, "~> 2.4"},
-      {:hackney, "~> 1.18"},
       {:sweet_xml, "~> 0.7"},
       {:sftp_ex, "~> 0.2"},
       {:finch, "~> 0.16"},
-      {:httpoison, "~> 1.8"},
+      {:req, "~> 0.5"},
 
       # Compression - using built-in :zstd module from Erlang/OTP 28+
 
