@@ -57,9 +57,22 @@ silently switch to plain SHA-256.
 opaque sha512     : ByteArray → ByteArray
 opaque sha512_256 : ByteArray → ByteArray
 
-/-- **Axiom 1**: SHA-512/256 = first 32 bytes of SHA-512. -/
-axiom sha512_256_eq_sha512_prefix (data : ByteArray) :
-    sha512_256 data = (sha512 data).extract 0 32
+/-- **Axiom 1**: SHA-512/256 is a distinct hash from SHA-512.
+
+SHA-512/256 (FIPS 180-4 §6.7) uses different initial hash values (IV) from
+SHA-512. It is NOT `sha512(data)[0..32]`. Both produce 32-byte digests from
+a common compression function, but with separate IVs so their outputs differ
+for the same input.
+
+Pinning this axiom prevents a silent regression to truncated SHA-512, which
+would produce chunk IDs incompatible with desync and Godot's implementation
+in `fabric_mmog_asset.cpp`.
+-/
+axiom sha512_256_ne_sha512_prefix (data : ByteArray) :
+    ∃ d : ByteArray, sha512_256 d ≠ (sha512 d).extract 0 32
+
+/-- SHA-512/256 output is always 32 bytes. -/
+axiom sha512_256_output_size (data : ByteArray) : (sha512_256 data).size = 32
 
 /-- SHA-512 output is always 64 bytes. -/
 axiom sha512_output_size (data : ByteArray) : (sha512 data).size = 64

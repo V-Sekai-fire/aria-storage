@@ -40,9 +40,13 @@ defmodule AriaStorage.Chunks do
 
   @doc "Assembles a file from chunks using an index.\n\nDelegates to `AriaStorage.Chunks.Assembly.assemble_file/4`.\n\nOptions:\n- `:seeds` - List of seed files for efficient reconstruction\n- `:verify` - Verify chunk checksums during assembly (default: true)\n- `:reflink` - Use reflinks/CoW when possible (default: true)\n"
   defdelegate assemble_file(chunks, index, output_path, opts \\ []), to: Assembly
-  @doc "Calculates SHA512/256 hash for chunk identification.\n"
+  @doc "Calculates SHA-512/256 hash for chunk identification.
+
+  Uses the proper SHA-512/256 algorithm (FIPS 180-4 §6.7) with its own IV,
+  NOT a truncation of SHA-512. This matches desync/casync and Godot's
+  standalone sha512_256() implementation in fabric_mmog_asset.cpp."
   def calculate_chunk_id(data) when is_binary(data) do
-    :crypto.hash(:sha512, data) |> binary_part(0, 32)
+    :crypto.hash(:sha512_256, data)
   end
 
   @doc "Compresses chunk data using the specified compression algorithm.\n\nDelegates to `AriaStorage.Chunks.Compression.compress_chunk/2`.\n"
