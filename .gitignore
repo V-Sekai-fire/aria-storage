@@ -21,3 +21,4 @@ aria_storage-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+lean/.lake/
