@@ -68,14 +68,13 @@ defmodule AriaStorage.ChunkUploader do
     filename <> ".cacnk"
   end
 
+  # desync wire format: /<4-hex>/<64-hex>.cacnk — single 4-char prefix level
   defp organize_chunk_path(chunk_id_hex) do
-    case String.length(chunk_id_hex) do
-      len when len >= 4 ->
-        <<a::binary-size(2), b::binary-size(2), _rest::binary>> = chunk_id_hex
-        "chunks/#{a}/#{b}"
-
-      _ ->
-        "chunks/misc"
+    if String.length(chunk_id_hex) >= 4 do
+      <<prefix::binary-size(4), _rest::binary>> = chunk_id_hex
+      prefix
+    else
+      "misc"
     end
   end
 

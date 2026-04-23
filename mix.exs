@@ -41,6 +41,7 @@ defmodule AriaStorage.MixProject do
       {:sftp_ex, "~> 0.2"},
       {:finch, "~> 0.16"},
       {:req, "~> 0.5"},
+      {:plug, "~> 1.16"},
 
       # Compression - using built-in :zstd module from Erlang/OTP 28+
 
@@ -59,7 +60,8 @@ defmodule AriaStorage.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
-      {:stream_data, "~> 1.2", only: :test}
+      {:stream_data, "~> 1.2", only: :test},
+      {:propcheck, "~> 1.4", only: [:test, :dev], runtime: false}
     ]
   end
 end

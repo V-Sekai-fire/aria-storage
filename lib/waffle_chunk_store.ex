@@ -26,13 +26,15 @@ defmodule AriaStorage.WaffleChunkStore do
     Path.basename(file.file_name, Path.extname(file.file_name)) <> ".cacnk"
   end
 
-  def storage_dir(version, {_file, %{chunk_id: chunk_id}}) when version == :original do
-    <<prefix::binary-size(2), _rest::binary>> = chunk_id
-    "chunks/#{prefix}"
+  # desync wire format: /<4-hex-prefix>/<64-hex-id>.cacnk
+  # e.g. /ab12/ab12cd34ef56...64chars.cacnk
+  def storage_dir(_version, {_file, %{chunk_id: chunk_id}}) do
+    <<prefix::binary-size(4), _rest::binary>> = chunk_id
+    prefix
   end
 
-  def storage_dir(version, {_file, _scope}) when version == :original do
-    "chunks/misc"
+  def storage_dir(_version, {_file, _scope}) do
+    "misc"
   end
 
   def default_url(version) when version == :original do
@@ -69,6 +71,30 @@ defmodule AriaStorage.WaffleChunkStore do
       end
     after
       File.rm(temp_file)
+    end
+  end
+
+  @doc "Returns the raw compressed .cacnk bytes for a chunk — for HTTP serving without decompression."
+  def retrieve_raw_chunk(chunk_id_hex) when is_binary(chunk_id_hex) do
+    scope = %{chunk_id: chunk_id_hex}
+    file_path = url({nil, scope}, signed: true)
+    download_chunk_file(file_path)
+  end
+
+  @doc "Stores raw .cacnk bytes (already compressed) directly — for HTTP PUT ingestion."
+  def store_raw_chunk(chunk_id_hex, raw_bytes)
+      when is_binary(chunk_id_hex) and is_binary(raw_bytes) do
+    scope = %{chunk_id: chunk_id_hex}
+    temp_path = Path.join(System.tmp_dir!(), "chunk_#{chunk_id_hex}.tmp")
+    :ok = File.write!(temp_path, raw_bytes)
+
+    try do
+      case store({temp_path, scope}) do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:error, {:waffle_store_failed, reason}}
+      end
+    after
+      File.rm(temp_path)
     end
   end
 

@@ -192,8 +192,8 @@ defmodule AriaStorage.WaffleAdapter do
 
   defp build_s3_key(chunk_id) do
     chunk_id_hex = Base.encode16(chunk_id, case: :lower)
-    <<a::binary-size(2), b::binary-size(2), _rest::binary>> = chunk_id_hex
-    "chunks/#{a}/#{b}/#{chunk_id_hex}.cacnk"
+    <<prefix::binary-size(4), _rest::binary>> = chunk_id_hex
+    "#{prefix}/#{chunk_id_hex}.cacnk"
   end
 
   defp configure_local_storage(config) do
