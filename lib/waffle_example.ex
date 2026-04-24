@@ -137,10 +137,7 @@ defmodule AriaStorage.WaffleExample do
         case Storage.list_waffle_files(backend: backend, limit: 5) do
           {:ok, files} ->
             Logger.info(" Recent files (#{length(files)}):")
-
-            Enum.each(files, fn file ->
-              Logger.debug("   - #{file.index_ref} (#{format_bytes(file.size)})")
-            end)
+            Enum.each(files, &log_file_entry/1)
 
           {:error, reason} ->
             Logger.warning("  Could not list files: #{inspect(reason)}")
@@ -176,6 +173,10 @@ defmodule AriaStorage.WaffleExample do
         Logger.error(" Cleanup failed: #{inspect(reason)}")
         {:error, reason}
     end
+  end
+
+  defp log_file_entry(file) do
+    Logger.debug("   - #{file.index_ref} (#{format_bytes(file.size)})")
   end
 
   defp format_bytes(bytes) when is_integer(bytes) do

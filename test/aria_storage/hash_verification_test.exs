@@ -6,8 +6,8 @@
 defmodule AriaStorage.HashVerificationTest do
   @moduledoc "Comprehensive test suite for hash verification functionality.\n\nThis test suite validates the hash verification mechanisms discovered during\nour analysis, ensuring that SHA512/256 is used consistently throughout the\nsystem and that all verification components work correctly.\n"
   use ExUnit.Case, async: true
-  alias AriaStorage.Chunks
   alias AriaStorage.CasyncDecoder
+  alias AriaStorage.Chunks
   @ca_format_sha512_256 2_305_843_009_213_693_952
   describe("SHA512/256 hash consistency") do
     test "chunk ID calculation uses SHA512/256" do

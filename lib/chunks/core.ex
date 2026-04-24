@@ -4,8 +4,8 @@
 defmodule AriaStorage.Chunks.Core do
   @moduledoc "Core chunking algorithms and chunk creation functionality.\n\nThis module contains the main chunking logic that uses rolling hash\nto create content-defined chunks from files.\n"
   alias AriaStorage.Chunks
-  alias AriaStorage.Chunks.RollingHash
   alias AriaStorage.Chunks.Compression
+  alias AriaStorage.Chunks.RollingHash
   @default_min_chunk_size 16 * 1024
   @default_avg_chunk_size 64 * 1024
   @default_max_chunk_size 256 * 1024
@@ -54,7 +54,7 @@ defmodule AriaStorage.Chunks.Core do
 
   @doc "Create a chunk from binary data with specified offset and compression.\n"
   @spec create_chunk_from_data(binary(), non_neg_integer(), Compression.compression_algorithm()) ::
-          {:ok, Chunks.t()} | {:error, any()}
+          {:ok, Chunks.t()}
   def create_chunk_from_data(data, offset, compression) do
     case Compression.compress_chunk(data, compression) do
       {:ok, compressed_data} ->
@@ -222,10 +222,8 @@ defmodule AriaStorage.Chunks.Core do
     if remaining_size <= min_size do
       chunk_data = binary_part(data, current_offset, remaining_size)
 
-      case create_chunk_from_data(chunk_data, current_offset, compression) do
-        {:ok, chunk} -> Enum.reverse([chunk | chunks])
-        _ -> Enum.reverse(chunks)
-      end
+      {:ok, chunk} = create_chunk_from_data(chunk_data, current_offset, compression)
+      Enum.reverse([chunk | chunks])
     else
       chunk_end =
         RollingHash.find_chunk_boundary(data, current_offset, min_size, max_size, discriminator)
@@ -233,29 +231,17 @@ defmodule AriaStorage.Chunks.Core do
       chunk_size = chunk_end - current_offset
       chunk_data = binary_part(data, current_offset, chunk_size)
 
-      case create_chunk_from_data(chunk_data, current_offset, compression) do
-        {:ok, chunk} ->
-          find_chunks_recursively(
-            data,
-            min_size,
-            max_size,
-            discriminator,
-            compression,
-            chunk_end,
-            [chunk | chunks]
-          )
+      {:ok, chunk} = create_chunk_from_data(chunk_data, current_offset, compression)
 
-        _ ->
-          find_chunks_recursively(
-            data,
-            min_size,
-            max_size,
-            discriminator,
-            compression,
-            chunk_end,
-            chunks
-          )
-      end
+      find_chunks_recursively(
+        data,
+        min_size,
+        max_size,
+        discriminator,
+        compression,
+        chunk_end,
+        [chunk | chunks]
+      )
     end
   end
 end

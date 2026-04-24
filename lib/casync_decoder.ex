@@ -2,7 +2,33 @@
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
 defmodule AriaStorage.CasyncDecoder do
-  @moduledoc "Advanced casync file decoder and analyzer.\n\nThis module provides comprehensive decoding and analysis capabilities for all casync file formats:\n- .caibx (Content Archive Index for Blobs)\n- .caidx (Content Archive Index for Directory Trees)\n- .catar (Archive Container format)\n- .cacnk (Compressed Chunk files)\n\nThe decoder supports both local and remote file processing, with full chunk reconstruction\nand integrity verification capabilities.\n\n## Examples\n\n    # Decode a local CAIDX file with store\n    {:ok, result} = AriaStorage.CasyncDecoder.decode_file(\"/path/to/file.caidx\",\n      store_path: \"/path/to/file.store\")\n\n    # Decode a remote CAIDX file with remote store\n    {:ok, result} = AriaStorage.CasyncDecoder.decode_uri(\"https://example.com/file.caidx\",\n      store_uri: \"https://example.com/store/\")\n\n    # Assemble and verify complete file from chunks\n    {:ok, assembled_file} = AriaStorage.CasyncDecoder.assemble_file(parsed_data,\n      store_path: \"/path/to/store\", output_path: \"/path/to/output.bin\")\n\n"
+  @moduledoc """
+  Advanced casync file decoder and analyzer.
+
+  This module provides comprehensive decoding and analysis capabilities for all casync file formats:
+  - .caibx (Content Archive Index for Blobs)
+  - .caidx (Content Archive Index for Directory Trees)
+  - .catar (Archive Container format)
+  - .cacnk (Compressed Chunk files)
+
+  The decoder supports both local and remote file processing, with full chunk reconstruction
+  and integrity verification capabilities.
+
+  ## Examples
+
+      # Decode a local CAIDX file with store
+      {:ok, result} = AriaStorage.CasyncDecoder.decode_file("/path/to/file.caidx",
+        store_path: "/path/to/file.store")
+
+      # Decode a remote CAIDX file with remote store
+      {:ok, result} = AriaStorage.CasyncDecoder.decode_uri("https://example.com/file.caidx",
+        store_uri: "https://example.com/store/")
+
+      # Assemble and verify complete file from chunks
+      {:ok, assembled_file} = AriaStorage.CasyncDecoder.assemble_file(parsed_data,
+        store_path: "/path/to/store", output_path: "/path/to/output.bin")
+
+  """
   require Logger
   import Bitwise
   alias AriaStorage.Parsers.CasyncFormat
@@ -213,81 +239,102 @@ defmodule AriaStorage.CasyncDecoder do
     if Enum.empty?(chunks) do
       {:error, :no_chunks_to_assemble}
     else
-      output_name = opts[:output_name] || "assembled_file"
-      assembled_file = Path.join(output_dir, output_name)
-      store_context = get_store_context(opts)
-      cache_path = get_cache_path(opts)
-      total_size = parsed_data.header.total_size
-      feature_flags = parsed_data.feature_flags
+      do_assemble_chunks(parsed_data, chunks, opts, output_dir, progress_callback)
+    end
+  end
 
-      concurrency =
-        case store_context do
-          {:remote, _} -> 64
-          _ -> System.schedulers_online()
-        end
+  defp do_assemble_chunks(parsed_data, chunks, opts, output_dir, progress_callback) do
+    output_name = opts[:output_name] || "assembled_file"
+    assembled_file = Path.join(output_dir, output_name)
+    store_context = get_store_context(opts)
+    cache_path = get_cache_path(opts)
+    total_size = parsed_data.header.total_size
+    feature_flags = parsed_data.feature_flags
 
-      {unique_chunks, offsets_by_id} =
-        Enum.reduce(chunks, {[], %{}}, fn chunk, {uniq, offsets} ->
-          is_new = not Map.has_key?(offsets, chunk.chunk_id)
-          updated = Map.update(offsets, chunk.chunk_id, [chunk.offset], &[chunk.offset | &1])
-          {if(is_new, do: [chunk | uniq], else: uniq), updated}
-        end)
-
-      total_unique = length(unique_chunks)
-
-      done_counter = :atomics.new(1, [])
-      if progress_callback, do: progress_callback.(0, total_unique)
-
-      case :file.open(assembled_file, [:write, :binary]) do
-        {:ok, file} ->
-          if total_size > 0, do: :file.pwrite(file, total_size - 1, <<0>>)
-
-          {success_count, total_bytes} =
-            unique_chunks
-            |> Task.async_stream(
-              fn chunk ->
-                chunk_id_hex = Base.encode16(chunk.chunk_id, case: :lower)
-
-                with {:ok, raw} <- fetch_chunk_data(chunk_id_hex, store_context, cache_path),
-                     {:ok, data} <-
-                       decompress_and_verify_chunk(raw, chunk, chunk_id_hex, feature_flags) do
-                  offsets = Map.fetch!(offsets_by_id, chunk.chunk_id)
-                  Enum.each(offsets, &:file.pwrite(file, &1, data))
-                  n = :atomics.add_get(done_counter, 1, 1)
-                  if progress_callback && rem(n, 10) == 0, do: progress_callback.(n, total_unique - n)
-                  {:ok, length(offsets), byte_size(data) * length(offsets)}
-                end
-              end,
-              max_concurrency: concurrency,
-              ordered: false,
-              timeout: 300_000
-            )
-            |> Enum.reduce({0, 0}, fn
-              {:ok, {:ok, n, bytes}}, {tc, tb} -> {tc + n, tb + bytes}
-              _, acc -> acc
-            end)
-
-          :file.close(file)
-
-          case File.stat(assembled_file) do
-            {:ok, %{size: actual_size}} ->
-              {:ok,
-               %{
-                 success: true,
-                 assembled_file: assembled_file,
-                 bytes_written: total_bytes,
-                 chunks_processed: success_count,
-                 verification_passed: actual_size == total_size,
-                 size_verified: actual_size == total_size
-               }}
-
-            {:error, reason} ->
-              {:error, {:stat_failed, reason}}
-          end
-
-        {:error, reason} ->
-          {:error, {:file_open_failed, reason}}
+    concurrency =
+      case store_context do
+        {:remote, _} -> 64
+        _ -> System.schedulers_online()
       end
+
+    {unique_chunks, offsets_by_id} =
+      Enum.reduce(chunks, {[], %{}}, fn chunk, {uniq, offsets} ->
+        is_new = not Map.has_key?(offsets, chunk.chunk_id)
+        updated = Map.update(offsets, chunk.chunk_id, [chunk.offset], &[chunk.offset | &1])
+        {if(is_new, do: [chunk | uniq], else: uniq), updated}
+      end)
+
+    total_unique = length(unique_chunks)
+    done_counter = :atomics.new(1, [])
+    if progress_callback, do: progress_callback.(0, total_unique)
+
+    ctx = %{
+      store_context: store_context,
+      cache_path: cache_path,
+      feature_flags: feature_flags,
+      offsets_by_id: offsets_by_id,
+      total_unique: total_unique,
+      done_counter: done_counter,
+      progress_callback: progress_callback
+    }
+
+    case :file.open(assembled_file, [:write, :binary]) do
+      {:ok, file} ->
+        write_chunks_to_file(file, unique_chunks, ctx, total_size, concurrency, assembled_file)
+
+      {:error, reason} ->
+        {:error, {:file_open_failed, reason}}
+    end
+  end
+
+  defp write_chunks_to_file(file, unique_chunks, ctx, total_size, concurrency, assembled_file) do
+    if total_size > 0, do: :file.pwrite(file, total_size - 1, <<0>>)
+
+    {success_count, total_bytes} =
+      unique_chunks
+      |> Task.async_stream(
+        &fetch_and_write_chunk(&1, file, ctx),
+        max_concurrency: concurrency,
+        ordered: false,
+        timeout: 300_000
+      )
+      |> Enum.reduce({0, 0}, fn
+        {:ok, {:ok, n, bytes}}, {tc, tb} -> {tc + n, tb + bytes}
+        _, acc -> acc
+      end)
+
+    :file.close(file)
+    build_assembly_result(assembled_file, total_bytes, success_count, total_size)
+  end
+
+  defp fetch_and_write_chunk(chunk, file, ctx) do
+    chunk_id_hex = Base.encode16(chunk.chunk_id, case: :lower)
+
+    with {:ok, raw} <- fetch_chunk_data(chunk_id_hex, ctx.store_context, ctx.cache_path),
+         {:ok, data} <- decompress_and_verify_chunk(raw, chunk, chunk_id_hex, ctx.feature_flags) do
+      offsets = Map.fetch!(ctx.offsets_by_id, chunk.chunk_id)
+      Enum.each(offsets, &:file.pwrite(file, &1, data))
+      n = :atomics.add_get(ctx.done_counter, 1, 1)
+      if ctx.progress_callback && rem(n, 10) == 0, do: ctx.progress_callback.(n, ctx.total_unique - n)
+      {:ok, length(offsets), byte_size(data) * length(offsets)}
+    end
+  end
+
+  defp build_assembly_result(assembled_file, total_bytes, success_count, total_size) do
+    case File.stat(assembled_file) do
+      {:ok, %{size: actual_size}} ->
+        {:ok,
+         %{
+           success: true,
+           assembled_file: assembled_file,
+           bytes_written: total_bytes,
+           chunks_processed: success_count,
+           verification_passed: actual_size == total_size,
+           size_verified: actual_size == total_size
+         }}
+
+      {:error, reason} ->
+        {:error, {:stat_failed, reason}}
     end
   end
 
@@ -302,30 +349,7 @@ defmodule AriaStorage.CasyncDecoder do
     end)
 
     files_extracted =
-      Enum.reduce(parsed_data.files, 0, fn file, acc ->
-        path = Map.get(file, :path) || Map.get(file, :name, "unnamed")
-        file_path = Path.join(extract_dir, path)
-        parent_dir = Path.dirname(file_path)
-        File.mkdir_p!(parent_dir)
-        content = Map.get(file, :content)
-
-        if content do
-          File.write!(file_path, content)
-          mode = Map.get(file, :mode)
-
-          if mode do
-            perm = mode &&& 511
-
-            if perm > 0 do
-              File.chmod!(file_path, perm)
-            end
-          end
-
-          acc + 1
-        else
-          acc
-        end
-      end)
+      Enum.reduce(parsed_data.files, 0, &extract_file_entry(&1, &2, extract_dir))
 
     {:ok,
      %{
@@ -336,6 +360,29 @@ defmodule AriaStorage.CasyncDecoder do
        verification_passed: true,
        size_verified: true
      }}
+  end
+
+  defp extract_file_entry(file, acc, extract_dir) do
+    path = Map.get(file, :path) || Map.get(file, :name, "unnamed")
+    file_path = Path.join(extract_dir, path)
+    File.mkdir_p!(Path.dirname(file_path))
+    content = Map.get(file, :content)
+
+    if content do
+      File.write!(file_path, content)
+      apply_file_mode(file_path, Map.get(file, :mode))
+      acc + 1
+    else
+      acc
+    end
+  end
+
+  defp apply_file_mode(_file_path, nil), do: :ok
+
+  defp apply_file_mode(file_path, mode) do
+    perm = mode &&& 511
+    if perm > 0, do: File.chmod!(file_path, perm)
+    :ok
   end
 
   defp get_store_context(opts) do

@@ -48,61 +48,79 @@ defmodule AriaStorage.Parsers.CasyncFormat.ArchiveParser do
     {:error, :end_of_data}
   end
 
-  defp parse_next_catar_element(binary_data) do
-    case binary_data do
-      <<size::little-64, type::little-64, feature_flags::little-64, mode::little-64,
-        _field5::little-64, rest::binary>>
-      when type == ca_format_entry() ->
-        parse_entry_element(size, feature_flags, mode, rest)
+  defp parse_next_catar_element(
+         <<size::little-64, type::little-64, feature_flags::little-64, mode::little-64,
+           _field5::little-64, rest::binary>>
+       )
+       when type == ca_format_entry() do
+    parse_entry_element(size, feature_flags, mode, rest)
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>> when type == ca_format_filename() ->
-        parse_filename_element(size, remaining)
+  defp parse_next_catar_element(
+         <<size::little-64, type::little-64, major::little-64, minor::little-64,
+           remaining::binary>>
+       )
+       when type == ca_format_device() and size == 32 do
+    element = %{type: :device, major: major, minor: minor}
+    {:ok, element, remaining}
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>> when type == ca_format_payload() ->
-        parse_payload_element(size, remaining)
+  defp parse_next_catar_element(<<size::little-64, type::little-64, remaining::binary>>) do
+    parse_typed_element(type, size, remaining)
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>> when type == ca_format_symlink() ->
-        parse_symlink_element(size, remaining)
+  defp parse_next_catar_element(_) do
+    {:error, "Insufficient data for CATAR element header"}
+  end
 
-      <<size::little-64, type::little-64, major::little-64, minor::little-64, remaining::binary>>
-      when type == ca_format_device() and size == 32 ->
-        element = %{type: :device, major: major, minor: minor}
-        {:ok, element, remaining}
+  defp parse_typed_element(type, size, remaining) when type == ca_format_filename() do
+    parse_filename_element(size, remaining)
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>> when type == ca_format_goodbye() ->
-        parse_goodbye_element(size, remaining)
+  defp parse_typed_element(type, size, remaining) when type == ca_format_payload() do
+    parse_payload_element(size, remaining)
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>> when type == ca_format_user() ->
-        parse_user_element(size, remaining)
+  defp parse_typed_element(type, size, remaining) when type == ca_format_symlink() do
+    parse_symlink_element(size, remaining)
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>> when type == ca_format_group() ->
-        parse_group_element(size, remaining)
+  defp parse_typed_element(type, size, remaining) when type == ca_format_goodbye() do
+    parse_goodbye_element(size, remaining)
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>> when type == ca_format_selinux() ->
-        parse_selinux_element(size, remaining)
+  defp parse_typed_element(type, size, remaining) when type == ca_format_user() do
+    parse_user_element(size, remaining)
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>> when type == ca_format_xattr() ->
-        parse_xattr_element(size, remaining)
+  defp parse_typed_element(type, size, remaining) when type == ca_format_group() do
+    parse_group_element(size, remaining)
+  end
 
-      <<size::little-64, type::little-64, remaining::binary>>
-      when type in [
-             ca_format_acl_user(),
-             ca_format_acl_group(),
-             ca_format_acl_group_obj(),
-             ca_format_acl_default(),
-             ca_format_acl_default_user(),
-             ca_format_acl_default_group(),
-             ca_format_fcaps()
-           ] ->
-        parse_metadata_element(size, type, remaining)
+  defp parse_typed_element(type, size, remaining) when type == ca_format_selinux() do
+    parse_selinux_element(size, remaining)
+  end
 
-      <<size::little-64, type::little-64, _remaining::binary>> ->
-        {:error,
-         "Unknown CATAR element type: 0x#{Integer.to_string(type, 16) |> String.upcase()}, size: #{size}"}
+  defp parse_typed_element(type, size, remaining) when type == ca_format_xattr() do
+    parse_xattr_element(size, remaining)
+  end
 
-      _ ->
-        {:error, "Insufficient data for CATAR element header"}
-    end
+  defp parse_typed_element(type, size, remaining)
+       when type in [
+              ca_format_acl_user(),
+              ca_format_acl_group(),
+              ca_format_acl_group_obj(),
+              ca_format_acl_default(),
+              ca_format_acl_default_user(),
+              ca_format_acl_default_group(),
+              ca_format_fcaps()
+            ] do
+    parse_metadata_element(size, type, remaining)
+  end
+
+  defp parse_typed_element(type, size, _remaining) do
+    {:error,
+     "Unknown CATAR element type: 0x#{Integer.to_string(type, 16) |> String.upcase()}, size: #{size}"}
   end
 
   @spec parse_entry_element(non_neg_integer(), non_neg_integer(), non_neg_integer(), binary()) ::

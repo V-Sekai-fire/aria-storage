@@ -8,7 +8,7 @@ defmodule AriaStorage.Parsers.CasyncFormatTest do
   alias AriaStorage.Parsers.CasyncFormat
   @testdata_path Path.join([__DIR__, "..", "support", "testdata"])
   @moduledoc "Comprehensive tests for the ABNF casync/desync parser using real testdata\nfrom the desync repository.\n\nThese tests validate parsing of actual casync format files including:\n- .caibx (chunk index for blobs)\n- .caidx (chunk index for catar archives)\n- .catar (archive format)\n- .cacnk (compressed chunk files)\n"
-  def create_caibx_test_data() do
+  def create_caibx_test_data do
     magic = <<202, 27, 92>>
     version = 1
     total_size = 1024
@@ -36,7 +36,7 @@ defmodule AriaStorage.Parsers.CasyncFormatTest do
     magic <> header <> chunk1 <> chunk2
   end
 
-  def create_caidx_test_data() do
+  def create_caidx_test_data do
     format_index =
       <<48::little-64, 10_845_316_187_136_630_777::little-64, 0::little-64, 1024::little-64,
         1024::little-64, 1024::little-64>>
@@ -54,7 +54,7 @@ defmodule AriaStorage.Parsers.CasyncFormatTest do
     format_index <> table_header <> table_item <> table_tail
   end
 
-  def create_catar_test_data() do
+  def create_catar_test_data do
     entry_size = 64
     entry_type = 1
     entry_flags = 0
@@ -72,7 +72,7 @@ defmodule AriaStorage.Parsers.CasyncFormatTest do
     entry_header <> entry_metadata
   end
 
-  def create_cacnk_test_data() do
+  def create_cacnk_test_data do
     magic = <<202, 196, 78>>
     compressed_size = 100
     uncompressed_size = 200
@@ -243,8 +243,8 @@ defmodule AriaStorage.Parsers.CasyncFormatTest do
           assert is_list(files)
           assert is_list(directories)
           assert is_list(elements)
-          assert length(files) > 0
-          assert length(directories) == 0
+          assert files != []
+          assert directories == []
 
           Enum.each(files, fn file ->
             assert %{name: name, type: type} = file
@@ -299,8 +299,8 @@ defmodule AriaStorage.Parsers.CasyncFormatTest do
           assert %{format: :catar, files: files, directories: directories} = result
           assert is_list(files)
           assert is_list(directories)
-          assert length(files) == 0
-          assert length(directories) > 0
+          assert files == []
+          assert directories != []
 
         {:error, _} ->
           :ok

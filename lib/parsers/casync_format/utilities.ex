@@ -6,7 +6,11 @@ defmodule AriaStorage.Parsers.CasyncFormat.Utilities do
   require Logger
   require AriaStorage.Parsers.CasyncFormat.Constants
   import AriaStorage.Parsers.CasyncFormat.Constants
+  alias AriaStorage.Parsers.CasyncFormat.ArchiveParser
+  alias AriaStorage.Parsers.CasyncFormat.ChunkParser
   alias AriaStorage.Parsers.CasyncFormat.Constants
+  alias AriaStorage.Parsers.CasyncFormat.Encoder
+  alias AriaStorage.Parsers.CasyncFormat.IndexParser
 
   @type comparison_result :: %{
           match: boolean(),
@@ -118,27 +122,8 @@ defmodule AriaStorage.Parsers.CasyncFormat.Utilities do
       Logger.debug("✓ Binary data matches exactly!")
     else
       Logger.debug("\n=== DIFFERENCES ===")
-
-      Enum.each(comparison.differences, fn
-        {:size_mismatch, orig_size, enc_size} ->
-          Logger.debug("Size mismatch: original=#{orig_size}, encoded=#{enc_size}")
-
-        {:byte_diff, offset, orig_byte, enc_byte} ->
-          Logger.debug(
-            "Offset 0x#{Integer.to_string(offset, 16) |> String.pad_leading(8, "0")}: " <>
-              "original=0x#{Integer.to_string(orig_byte, 16) |> String.pad_leading(2, "0")} " <>
-              "encoded=0x#{Integer.to_string(enc_byte, 16) |> String.pad_leading(2, "0")}"
-          )
-      end)
-
-      if length(comparison.differences) > 0 do
-        first_diff = hd(comparison.differences)
-
-        case first_diff do
-          {:byte_diff, offset, _, _} -> print_hex_context(original, encoded, offset)
-          _ -> :ok
-        end
-      end
+      Enum.each(comparison.differences, &log_difference/1)
+      print_first_diff_context(comparison.differences, original, encoded)
     end
 
     comparison
@@ -171,19 +156,11 @@ defmodule AriaStorage.Parsers.CasyncFormat.Utilities do
       {:ok, original_data} ->
         Logger.debug("Original size: #{byte_size(original_data)} bytes")
 
-        case AriaStorage.Parsers.CasyncFormat.Encoder.encode_archive(parsed) do
+        case Encoder.encode_archive(parsed) do
           {:ok, encoded_data} ->
             Logger.info(" Encoding successful")
             Logger.debug("Encoded size: #{byte_size(encoded_data)} bytes")
-
-            if original_data == encoded_data do
-              Logger.info(" Perfect bit-exact roundtrip!")
-              {:ok, :perfect_match}
-            else
-              Logger.debug("⚠ Size or content differences detected")
-              comparison = print_hex_diff(original_data, encoded_data)
-              {:ok, {:differences, comparison}}
-            end
+            compare_roundtrip_data(original_data, encoded_data)
 
           {:error, reason} ->
             Logger.error(" Encoding failed: #{reason}")
@@ -193,6 +170,37 @@ defmodule AriaStorage.Parsers.CasyncFormat.Utilities do
       {:error, reason} ->
         Logger.error(" File read failed: #{reason}")
         {:error, reason}
+    end
+  end
+
+  defp print_first_diff_context([], _original, _encoded), do: :ok
+
+  defp print_first_diff_context([{:byte_diff, offset, _, _} | _], original, encoded) do
+    print_hex_context(original, encoded, offset)
+  end
+
+  defp print_first_diff_context([_ | _], _original, _encoded), do: :ok
+
+  defp log_difference({:size_mismatch, orig_size, enc_size}) do
+    Logger.debug("Size mismatch: original=#{orig_size}, encoded=#{enc_size}")
+  end
+
+  defp log_difference({:byte_diff, offset, orig_byte, enc_byte}) do
+    Logger.debug(
+      "Offset 0x#{Integer.to_string(offset, 16) |> String.pad_leading(8, "0")}: " <>
+        "original=0x#{Integer.to_string(orig_byte, 16) |> String.pad_leading(2, "0")} " <>
+        "encoded=0x#{Integer.to_string(enc_byte, 16) |> String.pad_leading(2, "0")}"
+    )
+  end
+
+  defp compare_roundtrip_data(original_data, encoded_data) do
+    if original_data == encoded_data do
+      Logger.info(" Perfect bit-exact roundtrip!")
+      {:ok, :perfect_match}
+    else
+      Logger.debug("⚠ Size or content differences detected")
+      comparison = print_hex_diff(original_data, encoded_data)
+      {:ok, {:differences, comparison}}
     end
   end
 
@@ -250,38 +258,36 @@ defmodule AriaStorage.Parsers.CasyncFormat.Utilities do
     |> :binary.bin_to_list()
     |> Enum.chunk_every(16)
     |> Enum.with_index()
-    |> Enum.each(fn {bytes, row} ->
-      offset = base_offset + row * 16
-
-      hex_part =
-        bytes
-        |> Enum.map_join(" ", &(Integer.to_string(&1, 16) |> String.pad_leading(2, "0")))
-        |> String.pad_trailing(47)
-
-      ascii_part =
-        Enum.map_join(bytes, "", fn b ->
-          if b >= 32 and b <= 126 do
-            <<b>>
-          else
-            "."
-          end
-        end)
-
-      Logger.debug(
-        "#{Integer.to_string(offset, 16) |> String.pad_leading(8, "0") |> String.upcase()}: #{hex_part} |#{ascii_part}|"
-      )
-    end)
+    |> Enum.each(&log_hex_row(&1, base_offset))
   end
+
+  defp log_hex_row({bytes, row}, base_offset) do
+    offset = base_offset + row * 16
+
+    hex_part =
+      bytes
+      |> Enum.map_join(" ", &(Integer.to_string(&1, 16) |> String.pad_leading(2, "0")))
+      |> String.pad_trailing(47)
+
+    ascii_part = Enum.map_join(bytes, "", &byte_to_ascii/1)
+
+    Logger.debug(
+      "#{Integer.to_string(offset, 16) |> String.pad_leading(8, "0") |> String.upcase()}: #{hex_part} |#{ascii_part}|"
+    )
+  end
+
+  defp byte_to_ascii(b) when b >= 32 and b <= 126, do: <<b>>
+  defp byte_to_ascii(_b), do: "."
 
   @spec test_index_roundtrip(binary()) :: {:ok, comparison_result()} | {:error, String.t()}
   defp test_index_roundtrip(binary_data) do
-    case AriaStorage.Parsers.CasyncFormat.IndexParser.parse_index(binary_data) do
+    case IndexParser.parse_index(binary_data) do
       {:ok, parsed} ->
         Logger.debug("✓ Parsing successful")
         Logger.debug("  Format: #{parsed.format}")
         Logger.debug("  Chunks: #{length(parsed.chunks)}")
 
-        case AriaStorage.Parsers.CasyncFormat.Encoder.encode_index(parsed) do
+        case Encoder.encode_index(parsed) do
           {:ok, encoded} ->
             Logger.debug("✓ Encoding successful")
             comparison = print_hex_diff(binary_data, encoded)
@@ -296,13 +302,13 @@ defmodule AriaStorage.Parsers.CasyncFormat.Utilities do
 
   @spec test_chunk_roundtrip(binary()) :: {:ok, comparison_result()} | {:error, String.t()}
   defp test_chunk_roundtrip(binary_data) do
-    case AriaStorage.Parsers.CasyncFormat.ChunkParser.parse_chunk(binary_data) do
+    case ChunkParser.parse_chunk(binary_data) do
       {:ok, parsed} ->
         Logger.debug("✓ Parsing successful")
         Logger.debug("  Magic: #{parsed.magic}")
         Logger.debug("  Compression: #{parsed.header.compression}")
 
-        case AriaStorage.Parsers.CasyncFormat.Encoder.encode_chunk(parsed) do
+        case Encoder.encode_chunk(parsed) do
           {:ok, encoded} ->
             Logger.debug("✓ Encoding successful")
             comparison = print_hex_diff(binary_data, encoded)
@@ -317,7 +323,7 @@ defmodule AriaStorage.Parsers.CasyncFormat.Utilities do
 
   @spec test_archive_roundtrip(binary()) :: {:ok, comparison_result()} | {:error, String.t()}
   defp test_archive_roundtrip(binary_data) do
-    case AriaStorage.Parsers.CasyncFormat.ArchiveParser.parse_archive(binary_data) do
+    case ArchiveParser.parse_archive(binary_data) do
       {:ok, parsed} ->
         Logger.debug("✓ Parsing successful")
         Logger.debug("  Format: #{parsed.format}")
@@ -325,7 +331,7 @@ defmodule AriaStorage.Parsers.CasyncFormat.Utilities do
         Logger.debug("  Files: #{length(parsed.files)}")
         Logger.debug("  Directories: #{length(parsed.directories)}")
 
-        case AriaStorage.Parsers.CasyncFormat.Encoder.encode_archive(parsed) do
+        case Encoder.encode_archive(parsed) do
           {:ok, encoded} ->
             Logger.debug("✓ Encoding successful")
             comparison = print_hex_diff(binary_data, encoded)

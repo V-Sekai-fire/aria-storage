@@ -6,8 +6,8 @@
 defmodule AriaStorage.CasyncIntegrationTest do
   use ExUnit.Case
   @moduletag :integration
-  alias AriaStorage.Parsers.CasyncFormat
   alias AriaStorage.ChunkUploader
+  alias AriaStorage.Parsers.CasyncFormat
   alias AriaStorage.TestFixtures.CasyncFixtures
   alias TestOutput
 

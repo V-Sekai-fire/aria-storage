@@ -6,8 +6,8 @@
 defmodule AriaStorage.Parsers.CasyncFormatBenchmarkTest do
   use ExUnit.Case, async: false
   alias AriaStorage.Parsers.CasyncFormat
-  alias TestOutput
   alias AriaStorage.TestFixtures.CasyncFixtures
+  alias TestOutput
 
   @moduledoc "Benchmark tests for the casync format parser.\n\nThese tests measure parsing performance across different file sizes\nand complexity levels to ensure the parser scales appropriately.\n"
   @testdata_path Path.join([__DIR__, "..", "support", "testdata"])

@@ -3,7 +3,7 @@
 
 defmodule AriaStorage.WaffleAdapter do
   @moduledoc "Waffle adapter for integrating desync chunk storage with existing chunk stores.\n\nThis adapter allows seamless integration between Waffle's file upload system\nand our desync-compatible chunk storage backends (local, S3, SFTP, HTTP).\n"
-  alias AriaStorage.{ChunkStore, ChunkUploader, Chunks}
+  alias AriaStorage.{Chunks, ChunkStore, ChunkUploader}
   alias AriaStorage.Parsers.CasyncFormat
   defstruct [:backend, :config, :uploader, :fallback]
 
@@ -57,38 +57,42 @@ defmodule AriaStorage.WaffleAdapter do
   def get_chunk(%__MODULE__{} = adapter, chunk_id) do
     case download_chunk_with_waffle(adapter, chunk_id) do
       {:ok, binary_data} ->
-        case CasyncFormat.parse_chunk(binary_data) do
-          {:ok, %{header: header, data: data}} ->
-            case header.compression do
-              :zstd ->
-                case Chunks.decompress_chunk(data, :zstd) do
-                  {:ok, decompressed} ->
-                    create_chunk_from_data(chunk_id, decompressed, data)
-
-                  decompressed when is_binary(decompressed) ->
-                    create_chunk_from_data(chunk_id, decompressed, data)
-
-                  {:error, _} ->
-                    create_chunk_from_data(chunk_id, data, data)
-                end
-
-              :none ->
-                create_chunk_from_data(chunk_id, data, data)
-
-              _ ->
-                {:error, {:unsupported_compression, header.compression}}
-            end
-
-          {:error, _} ->
-            create_chunk_from_data(chunk_id, binary_data, binary_data)
-        end
+        decode_chunk_binary(chunk_id, binary_data)
 
       {:error, reason} ->
-        case adapter.fallback do
-          nil -> {:error, reason}
-          fallback -> ChunkStore.get_chunk(fallback, chunk_id)
-        end
+        get_chunk_from_fallback(adapter.fallback, chunk_id, reason)
     end
+  end
+
+  defp decode_chunk_binary(chunk_id, binary_data) do
+    case CasyncFormat.parse_chunk(binary_data) do
+      {:ok, %{header: header, data: data}} ->
+        decompress_chunk_data(chunk_id, data, header.compression)
+
+      {:error, _} ->
+        create_chunk_from_data(chunk_id, binary_data, binary_data)
+    end
+  end
+
+  defp decompress_chunk_data(chunk_id, data, :zstd) do
+    case Chunks.decompress_chunk(data, :zstd) do
+      {:ok, decompressed} -> create_chunk_from_data(chunk_id, decompressed, data)
+      {:error, _} -> create_chunk_from_data(chunk_id, data, data)
+    end
+  end
+
+  defp decompress_chunk_data(chunk_id, data, :none) do
+    create_chunk_from_data(chunk_id, data, data)
+  end
+
+  defp decompress_chunk_data(_chunk_id, _data, compression) do
+    {:error, {:unsupported_compression, compression}}
+  end
+
+  defp get_chunk_from_fallback(nil, _chunk_id, reason), do: {:error, reason}
+
+  defp get_chunk_from_fallback(fallback, chunk_id, _reason) do
+    ChunkStore.get_chunk(fallback, chunk_id)
   end
 
   def chunk_exists?(%__MODULE__{} = adapter, chunk_id) do

@@ -14,60 +14,63 @@ defmodule AriaStorage.Parsers.CasyncFormat.IndexParser do
       <<size_field::little-64, type_field::little-64, feature_flags::little-64,
         chunk_size_min::little-64, chunk_size_avg::little-64, chunk_size_max::little-64,
         remaining_data::binary>> ->
-        if size_field == 48 and type_field == ca_format_index() do
-          format_type =
-            if feature_flags == 0 do
-              :caidx
-            else
-              :caibx
-            end
-
-          case remaining_data do
-            <<>> ->
-              result = %{
-                format: format_type,
-                header: %{version: 1, total_size: 0, chunk_count: 0},
-                chunks: [],
-                feature_flags: feature_flags,
-                chunk_size_min: chunk_size_min,
-                chunk_size_avg: chunk_size_avg,
-                chunk_size_max: chunk_size_max,
-                _original_table_data: <<>>
-              }
-
-              {:ok, result}
-
-            _ ->
-              case parse_format_table_with_items_binary(remaining_data) do
-                {:ok, table_items} ->
-                  result = %{
-                    format: format_type,
-                    header: %{
-                      version: 1,
-                      total_size: calculate_total_size(table_items),
-                      chunk_count: length(table_items)
-                    },
-                    chunks: convert_table_to_chunks(table_items),
-                    feature_flags: feature_flags,
-                    chunk_size_min: chunk_size_min,
-                    chunk_size_avg: chunk_size_avg,
-                    chunk_size_max: chunk_size_max,
-                    _original_table_data: remaining_data
-                  }
-
-                  {:ok, result}
-
-                {:error, reason} ->
-                  {:error, reason}
-              end
-          end
-        else
-          {:error,
-           "Invalid FormatIndex header: size=#{size_field}, type=0x#{Integer.to_string(type_field, 16)}"}
-        end
+        parse_index_header(size_field, type_field, feature_flags, chunk_size_min, chunk_size_avg,
+          chunk_size_max, remaining_data)
 
       _ ->
         {:error, "Invalid binary data: insufficient data for FormatIndex header"}
+    end
+  end
+
+  defp parse_index_header(size_field, type_field, feature_flags, chunk_size_min, chunk_size_avg,
+         chunk_size_max, remaining_data) do
+    if size_field == 48 and type_field == ca_format_index() do
+      format_type = if feature_flags == 0, do: :caidx, else: :caibx
+      parse_index_remaining(format_type, feature_flags, chunk_size_min, chunk_size_avg,
+        chunk_size_max, remaining_data)
+    else
+      {:error,
+       "Invalid FormatIndex header: size=#{size_field}, type=0x#{Integer.to_string(type_field, 16)}"}
+    end
+  end
+
+  defp parse_index_remaining(format_type, feature_flags, chunk_size_min, chunk_size_avg, chunk_size_max, <<>>) do
+    result = %{
+      format: format_type,
+      header: %{version: 1, total_size: 0, chunk_count: 0},
+      chunks: [],
+      feature_flags: feature_flags,
+      chunk_size_min: chunk_size_min,
+      chunk_size_avg: chunk_size_avg,
+      chunk_size_max: chunk_size_max,
+      _original_table_data: <<>>
+    }
+
+    {:ok, result}
+  end
+
+  defp parse_index_remaining(format_type, feature_flags, chunk_size_min, chunk_size_avg, chunk_size_max, remaining_data) do
+    case parse_format_table_with_items_binary(remaining_data) do
+      {:ok, table_items} ->
+        result = %{
+          format: format_type,
+          header: %{
+            version: 1,
+            total_size: calculate_total_size(table_items),
+            chunk_count: length(table_items)
+          },
+          chunks: convert_table_to_chunks(table_items),
+          feature_flags: feature_flags,
+          chunk_size_min: chunk_size_min,
+          chunk_size_avg: chunk_size_avg,
+          chunk_size_max: chunk_size_max,
+          _original_table_data: remaining_data
+        }
+
+        {:ok, result}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

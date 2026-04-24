@@ -2,6 +2,7 @@
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
 defmodule AriaStorage.Utils do
+  @moduledoc false
   @spec calculate_index_checksum([%{id: binary()}]) :: binary()
   def calculate_index_checksum(chunks) do
     chunk_ids = Enum.map(chunks, & &1.id)

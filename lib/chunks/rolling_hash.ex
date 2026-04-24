@@ -362,20 +362,25 @@ defmodule AriaStorage.Chunks.RollingHash do
     if pos > max_end or pos >= byte_size(data) do
       max_end
     else
-      if pos + 1 >= byte_size(data) do
-        max_end
-      else
-        out_byte = :binary.at(data, pos - @rolling_hash_window_size + 1)
-        in_byte = :binary.at(data, pos + 1)
-        new_hash = update_buzhash(hash, out_byte, in_byte)
-        new_pos = pos + 1
+      rolling_search_step(data, pos, max_end, hash, discriminator)
+    end
+  end
 
-        if rem(new_hash, discriminator) == discriminator - 1 do
-          new_pos + 1
-        else
-          rolling_search(data, new_pos, max_end, new_hash, discriminator)
-        end
-      end
+  defp rolling_search_step(data, pos, max_end, _hash, _discriminator)
+       when pos + 1 >= byte_size(data) do
+    max_end
+  end
+
+  defp rolling_search_step(data, pos, max_end, hash, discriminator) do
+    out_byte = :binary.at(data, pos - @rolling_hash_window_size + 1)
+    in_byte = :binary.at(data, pos + 1)
+    new_hash = update_buzhash(hash, out_byte, in_byte)
+    new_pos = pos + 1
+
+    if rem(new_hash, discriminator) == discriminator - 1 do
+      new_pos + 1
+    else
+      rolling_search(data, new_pos, max_end, new_hash, discriminator)
     end
   end
 end

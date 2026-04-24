@@ -309,7 +309,7 @@ defmodule AriaStorage.Parsers.CasyncFormatRoundtripTest do
       assert empty_caibx == re_encoded_data, "Re-encoded empty CAIDX data does not match original"
     end
 
-    defp create_caidx_test_data() do
+    defp create_caidx_test_data do
       format_index =
         <<48::little-64, 10_845_316_187_136_630_777::little-64, 0::little-64, 1024::little-64,
           1024::little-64, 1024::little-64>>
@@ -361,7 +361,7 @@ defmodule AriaStorage.Parsers.CasyncFormatRoundtripTest do
       end)
     end
 
-    defp create_cacnk_test_data() do
+    defp create_cacnk_test_data do
       magic = <<202, 196, 78>>
       compressed_size = 100
       uncompressed_size = 200

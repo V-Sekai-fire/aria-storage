@@ -80,7 +80,9 @@ defmodule AriaStorage do
   defdelegate compress_chunk(data, algorithm \\ :zstd), to: AriaStorage.Chunks
   defdelegate decompress_chunk(compressed_data, algorithm \\ :zstd), to: AriaStorage.Chunks
   defdelegate discriminator_from_avg(avg), to: AriaStorage.Chunks
-  defdelegate find_chunks_in_data(data, min_size, max_size, discriminator, compression), to: AriaStorage.Chunks, as: :find_all_chunks_in_data
+  defdelegate find_chunks_in_data(data, min_size, max_size, discriminator, compression),
+    to: AriaStorage.Chunks,
+    as: :find_all_chunks_in_data
 
   # Index Management API
   defdelegate create_index_from_chunks(chunks, opts \\ []), to: AriaStorage.Index, as: :create_index
@@ -270,20 +272,7 @@ defmodule AriaStorage do
     # Validate chunks in parallel
     chunk_results = chunks
     |> Enum.chunk_every(max(1, div(length(chunks), parallel)))
-    |> Task.async_stream(fn chunk_batch ->
-      Enum.map(chunk_batch, fn chunk ->
-        case get_chunk(chunk_store, chunk.id) do
-          {:ok, stored_chunk} ->
-            if stored_chunk.checksum == chunk.checksum do
-              {:valid, chunk.id}
-            else
-              {:invalid, chunk.id}
-            end
-          {:error, _} ->
-            {:missing, chunk.id}
-        end
-      end)
-    end, timeout: 30_000)
+    |> Task.async_stream(&validate_chunk_batch(&1, chunk_store), timeout: 30_000)
     |> Enum.flat_map(fn {:ok, results} -> results end)
 
     # Aggregate results
@@ -354,5 +343,23 @@ defmodule AriaStorage do
 
   defp retrieve_chunks_for_index(_index, nil) do
     {:error, :chunk_store_required}
+  end
+
+  defp validate_chunk_batch(chunk_batch, chunk_store) do
+    Enum.map(chunk_batch, &validate_single_chunk(&1, chunk_store))
+  end
+
+  defp validate_single_chunk(chunk, chunk_store) do
+    case get_chunk(chunk_store, chunk.id) do
+      {:ok, stored_chunk} ->
+        if stored_chunk.checksum == chunk.checksum do
+          {:valid, chunk.id}
+        else
+          {:invalid, chunk.id}
+        end
+
+      {:error, _} ->
+        {:missing, chunk.id}
+    end
   end
 end

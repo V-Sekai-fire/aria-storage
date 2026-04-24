@@ -3,9 +3,9 @@
 
 defmodule AriaStorage.Chunks.Assembly do
   @moduledoc "File assembly utilities for reconstructing files from chunks.\n\nProvides functionality to assemble files from chunks using index information,\nwith support for verification, reflinks, and seed files for efficient reconstruction.\n"
+  alias AriaStorage.Chunks
   alias AriaStorage.Index
   alias AriaStorage.Utils
-  alias AriaStorage.Chunks
   @type assembly_options :: [seeds: [String.t()], verify: boolean(), reflink: boolean()]
   @type assembly_result :: {:ok, String.t()} | {:error, atom() | {atom(), any()}}
   @doc "Assembles a file from chunks using an index.\n\nOptions:\n- `:seeds` - List of seed files for efficient reconstruction\n- `:verify` - Verify chunk checksums during assembly (default: true)\n- `:reflink` - Use reflinks/CoW when possible (default: true)\n"
@@ -44,14 +44,9 @@ defmodule AriaStorage.Chunks.Assembly do
 
   @doc "Write chunks to a file in order.\n"
   @spec write_chunks_to_file(File.io_device(), [Chunks.t()], Index.t(), [String.t()], boolean()) ::
-          :ok | {:error, any()}
+          :ok
   def write_chunks_to_file(file, chunks, _index, _seeds, _use_reflink) do
-    Enum.reduce_while(chunks, :ok, fn chunk, _acc ->
-      case IO.binwrite(file, chunk.data) do
-        :ok -> {:cont, :ok}
-        {:error, reason} -> {:halt, {:error, reason}}
-      end
-    end)
+    Enum.each(chunks, &IO.binwrite(file, &1.data))
   end
 
   @doc "Verify chunk integrity during assembly.\n"
@@ -93,14 +88,16 @@ defmodule AriaStorage.Chunks.Assembly do
     if verify do
       chunks
       |> Enum.with_index()
-      |> Enum.reduce_while(:ok, fn {chunk, index}, _acc ->
-        case verify_chunk(chunk) do
-          :ok -> {:cont, :ok}
-          {:error, reason} -> {:halt, {:error, {reason, index}}}
-        end
-      end)
+      |> Enum.reduce_while(:ok, &reduce_verify_chunk/2)
     else
       :ok
+    end
+  end
+
+  defp reduce_verify_chunk({chunk, index}, _acc) do
+    case verify_chunk(chunk) do
+      :ok -> {:cont, :ok}
+      {:error, reason} -> {:halt, {:error, {reason, index}}}
     end
   end
 

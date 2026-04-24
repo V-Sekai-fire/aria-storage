@@ -38,7 +38,6 @@ defmodule AriaStorage.ChunkUploader do
   def transform(:compressed, {%Chunks{data: data}, _scope}) do
     case Chunks.compress_chunk(data, :zstd) do
       {:ok, compressed} -> {:ok, create_temp_file(compressed)}
-      compressed when is_binary(compressed) -> {:ok, create_temp_file(compressed)}
       {:error, _} -> {:ok, create_temp_file(data)}
     end
   end
@@ -92,19 +91,21 @@ defmodule AriaStorage.ChunkUploader do
     calculated_id = Chunks.calculate_chunk_id(data)
 
     if calculated_id == expected_id do
-      if checksum do
-        calculated_checksum = :crypto.hash(:sha256, data)
-
-        if calculated_checksum == checksum do
-          :ok
-        else
-          {:error, :checksum_mismatch}
-        end
-      else
-        :ok
-      end
+      validate_chunk_checksum(data, checksum)
     else
       {:error, :chunk_id_mismatch}
+    end
+  end
+
+  defp validate_chunk_checksum(_data, nil), do: :ok
+
+  defp validate_chunk_checksum(data, checksum) do
+    calculated_checksum = :crypto.hash(:sha256, data)
+
+    if calculated_checksum == checksum do
+      :ok
+    else
+      {:error, :checksum_mismatch}
     end
   end
 end

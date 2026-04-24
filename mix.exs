@@ -14,7 +14,12 @@ defmodule AriaStorage.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       test_paths: ["test"],
-      elixirc_paths: elixirc_paths(Mix.env())
+      elixirc_paths: elixirc_paths(Mix.env()),
+      dialyzer: [
+        plt_add_apps: [:ex_aws, :plug, :req, :waffle, :waffle_ecto, :finch, :ecto, :ecto_sql],
+        ignore_warnings: ".dialyzer_ignore.exs",
+        list_unused_filters: true
+      ]
     ]
   end
 

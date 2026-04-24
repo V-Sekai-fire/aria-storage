@@ -6,8 +6,8 @@
 defmodule AriaStorage.CasyncDecoderTest do
   use ExUnit.Case, async: true
   alias AriaStorage.CasyncDecoder
-  alias AriaStorage.Parsers.CasyncFormat
   alias AriaStorage.Chunks
+  alias AriaStorage.Parsers.CasyncFormat
   @ca_format_sha512_256 2_305_843_009_213_693_952
   @testdata_path Path.expand("../support/testdata", __DIR__)
   @test_output_dir "/tmp/casync_decoder_test"
