@@ -1,166 +1,105 @@
 # AriaStorage
 
-AriaStorage provides efficient content-addressable storage and archiving capabilities for the Aria Character Core system. It implements chunked storage, deduplication, and compression for optimal data management.
+Content-addressable chunk storage compatible with the
+[casync](https://github.com/systemd/casync) /
+[desync](https://github.com/folbricht/desync) wire format.
 
-## Overview
+## How it works
 
-AriaStorage implements a modern storage system with:
+Files are split into content-defined chunks using a rolling Buzhash algorithm.
+Each chunk is identified by `SHA-512/256(uncompressed_data)` and stored as a
+zstd-compressed `.cacnk` file at `/<4-hex-prefix>/<64-hex-id>.cacnk` — the
+same path layout used by desync, so stores are interoperable.
 
-- **Content-Addressable Storage**: Files identified by cryptographic hashes
-- **Chunked Storage**: Large files split into manageable chunks for efficiency
-- **Deduplication**: Automatic elimination of duplicate data
-- **Compression**: Efficient storage using casync-compatible formats
-- **Archive Management**: Long-term storage and retrieval capabilities
+Index files (`.caibx` for blobs, `.caidx` for directory trees) record the
+ordered list of chunk IDs needed to reconstruct the original file.
 
-## Core Components
+## Modules
 
-### File Management
+| Module | Role |
+|---|---|
+| `AriaStorage` | Public API facade |
+| `AriaStorage.Chunks` / `Chunks.Core` | Rolling-hash chunking (Buzhash), SHA-512/256 IDs, zstd compression |
+| `AriaStorage.Chunks.Assembly` | Reassemble a file from chunks given an index |
+| `AriaStorage.CasyncDecoder` | Parse `.caibx`/`.caidx` index files; fetch and verify chunks from a store or URI; concurrent assembly |
+| `AriaStorage.Parsers.CasyncFormat` | Binary format parser for CAIBX, CAIDX, CACNK, CATAR |
+| `AriaStorage.WaffleChunkStore` | Store/retrieve `.cacnk` files via Waffle (local, S3, GCS) |
+| `AriaStorage.ChunkUploader` | `Waffle.Definition` callbacks — filename, path layout, integrity validation |
+| `AriaStorage.WaffleAdapter` | Higher-level adapter: configures backend at runtime, decodes retrieved chunks |
+| `AriaStorage.Storage` | `store_file_with_waffle/2` — reads a file, chunks it, stores via Waffle |
+| `AriaStorage.Desync` | Optional wrapper around the external `desync` CLI |
 
-- `AriaStorage.Files` - High-level file operations and metadata management
-- `AriaStorage.File` - Individual file representation and operations
-- `AriaStorage.FileRecord` - Database persistence for file metadata
+## Write path
 
-### Chunked Storage
+```
+file
+ └─ Chunks.Core.create_chunks/2          rolling Buzhash, content-defined boundaries
+     └─ chunk.id = SHA-512/256(data)
+     └─ chunk.compressed = zstd(data)
+ └─ WaffleChunkStore.store_chunk/2
+     └─ writes compressed bytes to temp file
+     └─ Waffle.Definition.store/1
+         ├─ local  →  <storage_dir>/<ab12>/<ab12cd...>.cacnk
+         └─ S3     →  s3://<bucket>/<ab12>/<ab12cd...>.cacnk
+ └─ Chunks.create_index/2                CAIBX struct: ordered chunk IDs + offsets
+```
 
-- `AriaStorage.Chunks` - Chunk creation, storage, and retrieval
-- `AriaStorage.ChunkStore` - Low-level chunk storage backend
-- `AriaStorage.ChunkUploader` - Efficient chunk upload and synchronization
+## Read path
 
-### Archive System
-
-- `AriaStorage.Archives` - Archive creation and management
-- `AriaStorage.CasyncDecoder` - Casync-compatible archive decoding
-- Support for `.caibx` (casync index) and `.caidx` (casync data) formats
+```
+index.caibx
+ └─ CasyncDecoder.decode_file/2          or Parsers.CasyncFormat.parse_index/1
+     └─ for each chunk ID:
+         └─ check XDG cache (~/.cache/casync/chunks/)
+         └─ fetch from store_path / store_uri
+         └─ CasyncFormat.parse_chunk/1   verify magic, decompress zstd
+         └─ :file.pwrite(fd, offset, data)   parallel, up to 64 concurrent tasks
+```
 
 ## Usage
 
-### File Storage
-
 ```elixir
-# Store a file with automatic chunking
-{:ok, file_record} = AriaStorage.Files.store_file("/path/to/file.txt")
+# Chunk a file and store via Waffle (local backend)
+{:ok, result} = AriaStorage.store_file("/path/to/file", backend: :local)
 
-# Retrieve file metadata
-{:ok, file} = AriaStorage.Files.get_file(file_record.id)
+# Chunk a file manually
+{:ok, chunks} = AriaStorage.create_chunks("/path/to/file")
+index = AriaStorage.create_index(chunks)
 
-# Download file content
-{:ok, content} = AriaStorage.Files.download_file(file_record.id)
-```
+# Assemble from chunks + index
+{:ok, path} = AriaStorage.assemble_file(chunks, index, "/output/file")
 
-### Chunk Operations
-
-```elixir
-# Create chunks from data
-chunks = AriaStorage.Chunks.create_chunks(data, chunk_size: 64_000)
-
-# Store chunks
-Enum.each(chunks, fn chunk ->
-  AriaStorage.ChunkStore.store_chunk(chunk.hash, chunk.data)
-end)
-
-# Retrieve chunk
-{:ok, chunk_data} = AriaStorage.ChunkStore.get_chunk(chunk_hash)
-```
-
-### Archive Management
-
-```elixir
-# Create archive from files
-{:ok, archive} = AriaStorage.Archives.create_archive([
-  "/path/to/file1.txt",
-  "/path/to/file2.txt"
-])
-
-# Extract archive
-{:ok, extracted_files} = AriaStorage.Archives.extract_archive(archive_path)
-
-# Decode casync archive
-{:ok, decoded_data} = AriaStorage.CasyncDecoder.decode_file(
+# Decode a .caibx index and fetch chunks from a local store
+{:ok, decoded} = AriaStorage.CasyncDecoder.decode_file(
   "archive.caibx",
-  chunk_directory: "/chunks"
+  store_path: "/path/to/store"
 )
 ```
 
-## Architecture
+## Storage backend configuration
 
-AriaStorage follows a layered architecture:
-
-```
-AriaStorage
-├── Files (High-level Operations)
-├── Chunks (Content-Addressable Storage)
-├── Archives (Compression & Packaging)
-└── Storage Backend (Persistence Layer)
-```
-
-## Storage Features
-
-- **Content Deduplication**: Identical chunks stored only once
-- **Incremental Backup**: Only changed chunks need to be transferred
-- **Parallel Processing**: Concurrent chunk operations for performance
-- **Integrity Verification**: Cryptographic hash verification
-- **Compression**: Efficient storage using modern compression algorithms
-
-## Configuration
-
-Configure AriaStorage in your application:
+Backend is selected at runtime via the `:waffle` application env, set by
+`WaffleAdapter.configure_waffle/2` or `Storage.configure_waffle_storage/1`:
 
 ```elixir
-config :aria_storage,
-  chunk_size: 64_000,
-  storage_backend: AriaStorage.ChunkStore.FileSystem,
-  storage_path: "/var/lib/aria/storage",
-  compression: :zstd
+# Local filesystem (default)
+AriaStorage.configure_storage(%{backend: :local, storage_dir: "/var/lib/chunks"})
+
+# Amazon S3 / S3-compatible
+AriaStorage.configure_storage(%{backend: :s3, bucket: "my-chunks", region: "us-east-1"})
+
+# Google Cloud Storage
+AriaStorage.configure_storage(%{backend: :gcs, bucket: "my-chunks"})
 ```
 
-## Storage Backends
+## Wire format compatibility
 
-AriaStorage supports multiple storage backends:
+Chunk IDs use `SHA-512/256` (FIPS 180-4), matching casync and desync exactly —
+not truncated SHA-512. Stores produced by this library can be read by `desync`
+and vice versa.
 
-- **FileSystem**: Local filesystem storage (default)
-- **S3**: Amazon S3 compatible storage
-- **Memory**: In-memory storage for testing
-
-## Development
-
-### Running Tests
+## Running tests
 
 ```bash
-mix test test/aria_storage/ --timeout 120
+mix test
 ```
-
-### Storage Cleanup
-
-```bash
-# Clean up orphaned chunks
-AriaStorage.Chunks.cleanup_orphaned_chunks()
-
-# Verify storage integrity
-AriaStorage.Files.verify_integrity()
-```
-
-## Performance
-
-AriaStorage is optimized for:
-
-- **Large Files**: Efficient handling of multi-gigabyte files
-- **High Throughput**: Parallel chunk processing
-- **Low Latency**: Fast retrieval of frequently accessed data
-- **Storage Efficiency**: Deduplication and compression reduce storage requirements
-
-## Use Cases
-
-- **Game Asset Storage**: Efficient storage of textures, models, and audio
-- **Version Control**: Content-addressable storage for file versioning
-- **Backup Systems**: Incremental backup with deduplication
-- **Content Distribution**: Efficient distribution of large files
-
-## Related Components
-
-- **AriaEngine**: Core planning and execution engine
-- **AriaAuth**: Authentication and session management
-- **AriaSecurity**: Security infrastructure and secrets management
-
-## Status
-
-AriaStorage provides stable content-addressable storage with ongoing optimization for performance and storage efficiency. The casync-compatible format ensures interoperability with existing tools.
