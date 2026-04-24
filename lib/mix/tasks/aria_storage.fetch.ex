@@ -6,56 +6,35 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
 
   @moduledoc """
   Downloads a `.caidx` or `.caibx` index from a remote URL, fetches all
-  referenced chunks from the corresponding store, and assembles the output file.
+  referenced chunks from the corresponding store, and assembles the output.
 
   ## Usage
 
-      mix aria_storage.fetch [options]
+      mix aria_storage.fetch --index INDEX_URL [options]
 
   ## Options
 
       --index URL     Index file URL (.caidx or .caibx). Required.
-      --store URL     Chunk store base URL. Defaults to the index URL's
-                      directory joined with `store/`.
-      --output PATH   Directory to write the assembled output. Defaults to
-                      the current directory.
+      --store URL     Chunk store base URL. Required unless the store
+                      can be inferred as `store/` relative to the index.
+      --output PATH   Directory to write the assembled output.
+                      Defaults to the current directory.
 
   ## Examples
 
-      # Fetch the V-Sekai Linux game build
       mix aria_storage.fetch \\
-        --index https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_linux_x86_64.caidx \\
-        --store https://raw.githubusercontent.com/V-Sekai/casync-v-sekai-game/main/store \\
-        --output /tmp/vsekai_linux
+        --index https://example.com/assets/game.caidx \\
+        --store https://example.com/assets/store \\
+        --output /tmp/game
 
-      # Fetch using default store inference (same base URL as index)
-      mix aria_storage.fetch \\
-        --index https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_windows_x86_64.caidx \\
-        --output /tmp/vsekai_windows
+  ## Notes
 
-  ## Available indexes (via GitHub Pages)
-
-      https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_linux_x86_64.caidx
-      https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_macos_x86_64.caidx
-      https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_windows_x86_64.caidx
-
-  ## Chunk store
-
-  The `.cacnk` chunk files are binary and are NOT served by GitHub Pages (404).
-  They must be fetched from raw.githubusercontent.com:
-
-      https://raw.githubusercontent.com/V-Sekai/casync-v-sekai-game/main/store
-
-  The store directory on GitHub is:
-      https://github.com/V-Sekai/casync-v-sekai-game/tree/main/store
-
-  The task handles this automatically — do not pass the GitHub tree URL as --store.
+  Chunk files (`.cacnk`) must be served as raw binary content.
+  GitHub Pages does not serve binary files — use `raw.githubusercontent.com`
+  when the store is hosted in a GitHub repository.
   """
 
   use Mix.Task
-
-  @base_url "https://v-sekai.github.io/casync-v-sekai-game"
-  @default_store "https://raw.githubusercontent.com/V-Sekai/casync-v-sekai-game/main/store"
 
   @impl Mix.Task
   def run(args) do
@@ -67,7 +46,7 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
         strict: [index: :string, store: :string, output: :string]
       )
 
-    index_url = Keyword.get(opts, :index) || default_index_url()
+    index_url = Keyword.get(opts, :index) || Mix.raise("--index URL is required")
     store_url = Keyword.get(opts, :store) || infer_store_url(index_url)
     output_dir = Keyword.get(opts, :output, File.cwd!())
 
@@ -109,33 +88,16 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
     end
   end
 
-  defp default_index_url do
-    Mix.shell().info(
-      "No --index given. Fetching Linux build from #{@base_url}.\n" <>
-        "Pass --index URL to choose a different platform."
-    )
-
-    "#{@base_url}/vsekai_game_linux_x86_64.caidx"
-  end
-
+  # Assume store/ is a sibling directory of the index file.
   defp infer_store_url(index_url) do
-    cond do
-      # GitHub Pages URL — binary .cacnk files return 404 there.
-      # The store must be fetched from raw.githubusercontent.com.
-      String.contains?(index_url, "v-sekai.github.io/casync-v-sekai-game") ->
-        @default_store
+    store_url =
+      index_url
+      |> URI.parse()
+      |> Map.update!(:path, &(Path.dirname(&1) <> "/store"))
+      |> URI.to_string()
 
-      # GitHub tree URL — convert to raw content URL.
-      String.contains?(index_url, "github.com/V-Sekai/casync-v-sekai-game") ->
-        @default_store
-
-      true ->
-        # Best-effort: assume store/ is a sibling of the index file.
-        index_url
-        |> URI.parse()
-        |> Map.update!(:path, &(Path.dirname(&1) <> "/store"))
-        |> URI.to_string()
-    end
+    Mix.shell().info("No --store given, inferring: #{store_url}")
+    store_url
   end
 
   defp format_bytes(bytes) when is_integer(bytes) do
