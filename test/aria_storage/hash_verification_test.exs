@@ -13,7 +13,7 @@ defmodule AriaStorage.HashVerificationTest do
     test "chunk ID calculation uses SHA512/256" do
       test_data = "Test data for hash verification"
       chunk_id = Chunks.calculate_chunk_id(test_data)
-      expected_id = :crypto.hash(:sha512, test_data) |> binary_part(0, 32)
+      expected_id = :crypto.hash(:sha512_256, test_data)
       assert chunk_id == expected_id, "Chunk ID should use SHA512/256"
       assert byte_size(chunk_id) == 32, "Chunk ID should be 32 bytes"
     end
@@ -21,7 +21,7 @@ defmodule AriaStorage.HashVerificationTest do
     test "SHA512/256 differs from SHA256" do
       test_data = "Comparison test data"
       sha256_hash = :crypto.hash(:sha256, test_data)
-      sha512_256_hash = :crypto.hash(:sha512, test_data) |> binary_part(0, 32)
+      sha512_256_hash = :crypto.hash(:sha512_256, test_data)
       chunk_id = Chunks.calculate_chunk_id(test_data)
       refute sha256_hash == sha512_256_hash, "SHA256 and SHA512/256 should differ"
       assert chunk_id == sha512_256_hash, "Chunk ID should use SHA512/256, not SHA256"

@@ -71,10 +71,9 @@ defmodule AriaStorage.ChunkUploader do
   # desync wire format: /<4-hex>/<64-hex>.cacnk — single 4-char prefix level
   defp organize_chunk_path(chunk_id_hex) do
     if String.length(chunk_id_hex) >= 4 do
-      <<prefix::binary-size(4), _rest::binary>> = chunk_id_hex
-      prefix
+      "chunks/#{String.slice(chunk_id_hex, 0, 2)}/#{String.slice(chunk_id_hex, 2, 2)}"
     else
-      "misc"
+      "chunks/misc"
     end
   end
 

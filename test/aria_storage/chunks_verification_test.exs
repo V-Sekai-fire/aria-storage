@@ -79,7 +79,7 @@ defmodule AriaStorage.ChunksVerificationTest do
       assert byte_size(chunk_id) == 32, "Chunk ID should be 32 bytes, got #{byte_size(chunk_id)}"
       chunk_id2 = Chunks.calculate_chunk_id(test_data)
       assert chunk_id == chunk_id2, "Chunk ID calculation should be deterministic"
-      expected_id = :crypto.hash(:sha512, test_data) |> binary_part(0, 32)
+      expected_id = :crypto.hash(:sha512_256, test_data)
       assert chunk_id == expected_id, "Chunk ID should match SHA512/256 format"
     end
 
