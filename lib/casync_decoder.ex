@@ -346,18 +346,25 @@ defmodule AriaStorage.CasyncDecoder do
     end
   end
 
-  defp get_cache_path(opts) do
-    case opts[:cache_path] do
-      nil ->
-        base =
-          System.get_env("XDG_CACHE_HOME") ||
+  def default_cache_path do
+    base =
+      System.get_env("XDG_CACHE_HOME") ||
+        case :os.type() do
+          {:win32, _} ->
+            System.get_env("LOCALAPPDATA") || Path.join(System.user_home!(), "AppData/Local")
+
+          {:unix, :darwin} ->
+            Path.join(System.user_home!(), "Library/Caches")
+
+          _ ->
             Path.join(System.user_home!(), ".cache")
+        end
 
-        Path.join([base, "casync", "chunks"])
+    Path.join([base, "casync", "chunks"])
+  end
 
-      path ->
-        path
-    end
+  defp get_cache_path(opts) do
+    opts[:cache_path] || default_cache_path()
   end
 
   defp chunk_local_path(dir, chunk_id_hex) do

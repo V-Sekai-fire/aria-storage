@@ -50,13 +50,7 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
     store_url = Keyword.get(opts, :store) || infer_store_url(index_url)
     output_dir = Keyword.get(opts, :output, File.cwd!())
 
-    cache_path =
-      Keyword.get(opts, :cache) ||
-        Path.join([
-          System.get_env("XDG_CACHE_HOME") || Path.join(System.user_home!(), ".cache"),
-          "casync",
-          "chunks"
-        ])
+    cache_path = Keyword.get(opts, :cache) || AriaStorage.CasyncDecoder.default_cache_path()
 
     Mix.shell().info("Index:  #{index_url}")
     Mix.shell().info("Store:  #{store_url}")
