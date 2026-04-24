@@ -33,14 +33,23 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
         --index https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_windows_x86_64.caidx \\
         --output /tmp/vsekai_windows
 
-  ## Available indexes at v-sekai.github.io/casync-v-sekai-game
+  ## Available indexes (via GitHub Pages)
 
-      vsekai_game_linux_x86_64.caidx
-      vsekai_game_macos_x86_64.caidx
-      vsekai_game_windows_x86_64.caidx
+      https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_linux_x86_64.caidx
+      https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_macos_x86_64.caidx
+      https://v-sekai.github.io/casync-v-sekai-game/vsekai_game_windows_x86_64.caidx
 
-  The chunk store is at:
+  ## Chunk store
+
+  The `.cacnk` chunk files are binary and are NOT served by GitHub Pages (404).
+  They must be fetched from raw.githubusercontent.com:
+
       https://raw.githubusercontent.com/V-Sekai/casync-v-sekai-game/main/store
+
+  The store directory on GitHub is:
+      https://github.com/V-Sekai/casync-v-sekai-game/tree/main/store
+
+  The task handles this automatically — do not pass the GitHub tree URL as --store.
   """
 
   use Mix.Task
@@ -110,14 +119,22 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
   end
 
   defp infer_store_url(index_url) do
-    if String.contains?(index_url, "v-sekai.github.io/casync-v-sekai-game") do
-      @default_store
-    else
-      # Best-effort: assume store/ is a sibling of the index file.
-      index_url
-      |> URI.parse()
-      |> Map.update!(:path, &(Path.dirname(&1) <> "/store"))
-      |> URI.to_string()
+    cond do
+      # GitHub Pages URL — binary .cacnk files return 404 there.
+      # The store must be fetched from raw.githubusercontent.com.
+      String.contains?(index_url, "v-sekai.github.io/casync-v-sekai-game") ->
+        @default_store
+
+      # GitHub tree URL — convert to raw content URL.
+      String.contains?(index_url, "github.com/V-Sekai/casync-v-sekai-game") ->
+        @default_store
+
+      true ->
+        # Best-effort: assume store/ is a sibling of the index file.
+        index_url
+        |> URI.parse()
+        |> Map.update!(:path, &(Path.dirname(&1) <> "/store"))
+        |> URI.to_string()
     end
   end
 
