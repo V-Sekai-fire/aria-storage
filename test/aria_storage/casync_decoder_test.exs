@@ -50,7 +50,7 @@ defmodule AriaStorage.CasyncDecoderTest do
   describe("hash verification") do
     test "verifies chunk hash correctly with SHA512/256" do
       test_data = "Test chunk data for hash verification"
-      expected_hash = :crypto.hash(:sha512, test_data) |> binary_part(0, 32)
+      expected_hash = :crypto.hash(:sha512_256, test_data)
 
       assert {:ok, ^test_data} =
                CasyncDecoder.verify_chunk(test_data, expected_hash, @ca_format_sha512_256)
@@ -58,7 +58,7 @@ defmodule AriaStorage.CasyncDecoderTest do
 
     test "returns error for hash mismatch" do
       test_data = "Test chunk data"
-      wrong_hash = :crypto.hash(:sha512, "different data") |> binary_part(0, 32)
+      wrong_hash = :crypto.hash(:sha512_256, "different data")
 
       assert {:error, {:hash_mismatch, _}} =
                CasyncDecoder.verify_chunk(test_data, wrong_hash, @ca_format_sha512_256)
@@ -75,7 +75,7 @@ defmodule AriaStorage.CasyncDecoderTest do
     test "confirms SHA512/256 vs SHA256 difference" do
       test_data = "Algorithm comparison test"
       sha256_hash = :crypto.hash(:sha256, test_data)
-      sha512_256_hash = :crypto.hash(:sha512, test_data) |> binary_part(0, 32)
+      sha512_256_hash = :crypto.hash(:sha512_256, test_data)
       refute sha256_hash == sha512_256_hash
       chunk_id = Chunks.calculate_chunk_id(test_data)
       assert chunk_id == sha512_256_hash
@@ -286,9 +286,13 @@ defmodule AriaStorage.CasyncDecoderTest do
   defp decompress_test_data(data, compression) do
     case compression do
       :zstd ->
-        case :zstd.decompress(data) do
-          result when is_binary(result) -> {:ok, result}
-          error -> {:error, {:zstd_error, error}}
+        try do
+          case :zstd.decompress(data) do
+            result when is_binary(result) -> {:ok, result}
+            result -> {:ok, IO.iodata_to_binary(result)}
+          end
+        rescue
+          e in ErlangError -> {:error, {:zstd_error, e.original}}
         end
 
       :none ->
@@ -316,7 +320,7 @@ defmodule AriaStorage.CasyncDecoderTest do
   end
 
   defp decompress_and_verify_test_chunk(chunk_data, chunk_info, _chunk_id_hex) do
-    case CasyncFormat.parse_chunk(chunk_data) do
+    case CasyncFormat.parse_chunk(IO.iodata_to_binary(chunk_data)) do
       {:ok, %{header: header, data: compressed_data}} ->
         handle_parsed_chunk(compressed_data, header.compression, chunk_info)
 
