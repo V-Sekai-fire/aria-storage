@@ -131,28 +131,23 @@ defmodule AriaStorage.Chunks.Core do
   defp create_rolling_hash_chunks(file_path, min_size, avg_size, max_size, compression) do
     discriminator = RollingHash.discriminator_from_avg(avg_size)
 
-    case File.open(file_path, [:read, :binary]) do
-      {:ok, file} ->
-        try do
-          chunks =
-            rolling_hash_chunk_file(
-              file,
-              min_size,
-              avg_size,
-              max_size,
-              discriminator,
-              compression,
-              0,
-              []
-            )
+    case File.open(file_path, [:read, :binary], fn file ->
+           chunks =
+             rolling_hash_chunk_file(
+               file,
+               min_size,
+               avg_size,
+               max_size,
+               discriminator,
+               compression,
+               0,
+               []
+             )
 
-          {:ok, Enum.reverse(chunks)}
-        after
-          File.close(file)
-        end
-
-      {:error, reason} ->
-        {:error, {:file_open, reason}}
+           {:ok, Enum.reverse(chunks)}
+         end) do
+      {:ok, result} -> result
+      {:error, reason} -> {:error, {:file_open, reason}}
     end
   end
 

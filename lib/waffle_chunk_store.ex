@@ -55,7 +55,7 @@ defmodule AriaStorage.WaffleChunkStore do
 
     temp_file = create_temp_chunk_file(chunk)
 
-    try do
+    result =
       case store({temp_file, scope}) do
         {:ok, file_path} ->
           {:ok,
@@ -69,9 +69,9 @@ defmodule AriaStorage.WaffleChunkStore do
         {:error, reason} ->
           {:error, {:waffle_store_failed, reason}}
       end
-    after
-      File.rm(temp_file)
-    end
+
+    File.rm(temp_file)
+    result
   end
 
   @doc "Returns the raw compressed .cacnk bytes for a chunk — for HTTP serving without decompression."
@@ -88,14 +88,14 @@ defmodule AriaStorage.WaffleChunkStore do
     temp_path = Path.join(System.tmp_dir!(), "chunk_#{chunk_id_hex}.tmp")
     :ok = File.write!(temp_path, raw_bytes)
 
-    try do
+    result =
       case store({temp_path, scope}) do
         {:ok, _} -> :ok
         {:error, reason} -> {:error, {:waffle_store_failed, reason}}
       end
-    after
-      File.rm(temp_path)
-    end
+
+    File.rm(temp_path)
+    result
   end
 
   @doc "Retrieves a chunk from Waffle storage.\n"

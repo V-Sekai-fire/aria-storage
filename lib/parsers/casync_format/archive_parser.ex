@@ -10,26 +10,21 @@ defmodule AriaStorage.Parsers.CasyncFormat.ArchiveParser do
   @doc "Parse a catar archive file from binary data.\n\nCATAR format contains a sequence of elements representing files, directories,\nand metadata in a structured format compatible with casync/desync tools.\n"
   @spec parse_archive(binary()) :: parse_result()
   def parse_archive(binary_data) when is_binary(binary_data) do
-    try do
-      case parse_catar_elements(binary_data, []) do
-        {:ok, elements} ->
-          {files, directories} = process_catar_elements(elements)
+    case parse_catar_elements(binary_data, []) do
+      {:ok, elements} ->
+        {files, directories} = process_catar_elements(elements)
 
-          result = %{
-            format: :catar,
-            files: files,
-            directories: directories,
-            elements: elements,
-            total_size: byte_size(binary_data)
-          }
+        {:ok,
+         %{
+           format: :catar,
+           files: files,
+           directories: directories,
+           elements: elements,
+           total_size: byte_size(binary_data)
+         }}
 
-          {:ok, result}
-
-        {:error, reason} ->
-          {:error, reason}
-      end
-    rescue
-      error -> {:error, "CATAR parsing failed: #{inspect(error)}"}
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

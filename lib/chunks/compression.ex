@@ -10,13 +10,10 @@ defmodule AriaStorage.Chunks.Compression do
   def compress_chunk(data, algorithm \\ :zstd) do
     case algorithm do
       :zstd ->
-        try do
-          compressed = :zstd.compress(data, %{compression_level: 1})
-          {:ok, compressed}
-        rescue
-          UndefinedFunctionError -> {:error, :compression_not_available}
-        catch
-          :error, reason -> {:error, {:compression_failed, reason}}
+        if function_exported?(:zstd, :compress, 2) do
+          {:ok, :erlang.iolist_to_binary(:zstd.compress(data, %{compression_level: 1}))}
+        else
+          {:error, :compression_not_available}
         end
 
       :none ->
@@ -32,13 +29,10 @@ defmodule AriaStorage.Chunks.Compression do
   def decompress_chunk(compressed_data, algorithm \\ :zstd) do
     case algorithm do
       :zstd ->
-        try do
-          decompressed = :zstd.decompress(compressed_data)
-          {:ok, decompressed}
-        rescue
-          UndefinedFunctionError -> {:error, :compression_not_available}
-        catch
-          :error, reason -> {:error, {:decompression_failed, reason}}
+        if function_exported?(:zstd, :decompress, 1) do
+          {:ok, :erlang.iolist_to_binary(:zstd.decompress(compressed_data))}
+        else
+          {:error, :compression_not_available}
         end
 
       :none ->
@@ -52,14 +46,7 @@ defmodule AriaStorage.Chunks.Compression do
   @doc "Check if a compression algorithm is available.\n"
   @spec compression_available?(compression_algorithm()) :: boolean()
   def compression_available?(:zstd) do
-    try do
-      :zstd.compress("test", %{compression_level: 1})
-      true
-    rescue
-      UndefinedFunctionError -> false
-    catch
-      :error, _ -> false
-    end
+    function_exported?(:zstd, :compress, 2)
   end
 
   def compression_available?(:none) do

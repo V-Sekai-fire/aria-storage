@@ -206,40 +206,36 @@ defmodule AriaStorage.CasyncDecoder do
       sorted_chunks = Enum.sort_by(parsed_data.chunks, & &1.offset)
       assembled_file = Path.join(output_dir, "assembled_file.bin")
 
-      case File.open(assembled_file, [:write, :binary]) do
-        {:ok, file} ->
-          try do
-            store_context = get_store_context(opts)
+      store_context = get_store_context(opts)
 
-            {success_count, total_bytes_written} =
-              assemble_chunks_to_file(
-                file,
-                sorted_chunks,
-                store_context,
-                0,
-                0,
-                progress_callback,
-                parsed_data.feature_flags
-              )
+      case File.open(assembled_file, [:write, :binary], fn file ->
+             assemble_chunks_to_file(
+               file,
+               sorted_chunks,
+               store_context,
+               0,
+               0,
+               progress_callback,
+               parsed_data.feature_flags
+             )
+           end) do
+        {:ok, {success_count, total_bytes_written}} ->
+          case File.stat(assembled_file) do
+            {:ok, %{size: actual_size}} ->
+              verification_passed = actual_size == parsed_data.header.total_size
 
-            File.close(file)
-            {:ok, file_stat} = File.stat(assembled_file)
-            actual_size = file_stat.size
-            verification_passed = actual_size == parsed_data.header.total_size
+              {:ok,
+               %{
+                 success: true,
+                 assembled_file: assembled_file,
+                 bytes_written: total_bytes_written,
+                 chunks_processed: success_count,
+                 verification_passed: verification_passed,
+                 size_verified: verification_passed
+               }}
 
-            {:ok,
-             %{
-               success: true,
-               assembled_file: assembled_file,
-               bytes_written: total_bytes_written,
-               chunks_processed: success_count,
-               verification_passed: verification_passed,
-               size_verified: verification_passed
-             }}
-          rescue
-            error ->
-              File.close(file)
-              {:error, {:assembly_failed, error}}
+            {:error, reason} ->
+              {:error, {:stat_failed, reason}}
           end
 
         {:error, reason} ->
@@ -441,10 +437,7 @@ defmodule AriaStorage.CasyncDecoder do
   end
 
   defp decompress_chunk_data(data, :zstd) do
-    case :zstd.decompress(data) do
-      result when is_binary(result) -> {:ok, result}
-      error -> {:error, {:zstd_error, error}}
-    end
+    {:ok, :erlang.iolist_to_binary(:zstd.decompress(data))}
   end
 
   defp decompress_chunk_data(data, :none) do
