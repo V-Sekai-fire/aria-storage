@@ -133,7 +133,7 @@ defmodule AriaStorage.CasyncDecoder do
   def verify_chunk(chunk_data, expected_hash, feature_flags) do
     calculated_hash =
       if (feature_flags &&& @ca_format_sha512_256) != 0 do
-        :crypto.hash(:sha512, chunk_data) |> binary_part(0, 32)
+        :crypto.hash(:sha512_256, chunk_data)
       else
         :crypto.hash(:sha256, chunk_data)
       end

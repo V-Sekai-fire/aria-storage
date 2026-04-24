@@ -56,9 +56,21 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
 
     File.mkdir_p!(output_dir)
 
-    progress = fn done, total ->
-      pct = if total > 0, do: round(done * 100 / total), else: 0
-      Mix.shell().info("  chunks: #{done}/#{total} (#{pct}%)")
+    # The decoder calls progress_callback.(done, remaining) — capture the
+    # initial total on first call so percentage stays in 0–100%.
+    initial_total = :atomics.new(1, [])
+    :atomics.put(initial_total, 1, 0)
+
+    progress = fn done, remaining ->
+      total = done + remaining
+
+      if :atomics.get(initial_total, 1) == 0 do
+        :atomics.put(initial_total, 1, total)
+      end
+
+      init = :atomics.get(initial_total, 1)
+      pct = if init > 0, do: round(done * 100 / init), else: 0
+      Mix.shell().info("  chunks: #{done}/#{init} (#{pct}%)")
     end
 
     Mix.shell().info("Fetching index...")
@@ -74,7 +86,7 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
         Mix.shell().info("Done.")
         Mix.shell().info("  format:  #{result.format}")
         Mix.shell().info("  chunks:  #{result.chunk_count}")
-        Mix.shell().info("  size:    #{format_bytes(result.file_size)}")
+        Mix.shell().info("  index:   #{format_bytes(result.file_size)}")
 
         if result.assembly_result do
           a = result.assembly_result
