@@ -108,28 +108,18 @@ defmodule AriaStorage.Parsers.CasyncFormat.IndexParser do
   end
 
   @spec calculate_total_size([Constants.table_item()]) :: non_neg_integer()
-  defp calculate_total_size(items) when is_list(items) and length(items) > 0 do
+  defp calculate_total_size([_ | _] = items) do
     List.last(items).offset
   end
 
-  defp calculate_total_size(_) do
-    0
-  end
+  defp calculate_total_size(_), do: 0
 
   @spec convert_table_to_chunks([Constants.table_item()]) :: [Constants.chunk_item()]
   defp convert_table_to_chunks(items) do
-    items
-    |> Enum.with_index()
-    |> Enum.map(fn {item, index} ->
-      previous_offset =
-        if index == 0 do
-          0
-        else
-          Enum.at(items, index - 1).offset
-        end
+    prev_offsets = [0 | Enum.map(items, & &1.offset)]
 
-      chunk_size = item.offset - previous_offset
-      %{chunk_id: item.chunk_id, offset: previous_offset, size: chunk_size, flags: 0}
+    Enum.zip_with(prev_offsets, items, fn prev, item ->
+      %{chunk_id: item.chunk_id, offset: prev, size: item.offset - prev, flags: 0}
     end)
   end
 end

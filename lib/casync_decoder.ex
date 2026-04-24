@@ -225,13 +225,14 @@ defmodule AriaStorage.CasyncDecoder do
           _ -> System.schedulers_online()
         end
 
-      unique_chunks = Enum.uniq_by(chunks, & &1.chunk_id)
-      total_unique = length(unique_chunks)
-
-      offsets_by_id =
-        Enum.reduce(chunks, %{}, fn chunk, acc ->
-          Map.update(acc, chunk.chunk_id, [chunk.offset], &[chunk.offset | &1])
+      {unique_chunks, offsets_by_id} =
+        Enum.reduce(chunks, {[], %{}}, fn chunk, {uniq, offsets} ->
+          updated = Map.update(offsets, chunk.chunk_id, [chunk.offset], &[chunk.offset | &1])
+          new_uniq = if map_size(updated) > map_size(offsets), do: [chunk | uniq], else: uniq
+          {new_uniq, updated}
         end)
+
+      total_unique = length(unique_chunks)
 
       done_counter = :atomics.new(1, [])
       if progress_callback, do: progress_callback.(0, total_unique)
