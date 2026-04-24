@@ -27,15 +27,6 @@
   {"lib/waffle_chunk_store.ex", :unknown_function},
   {"lib/waffle_example.ex", :unknown_function},
 
-  # AriaStorage.File uses Ecto schema macros.
-  {"lib/file.ex", :unknown_function},
-  {"lib/file.ex", :unknown_type},
-
-  # AriaStorage.Repo uses Ecto.Repo macros.
-  {"lib/aria_storage/repo.ex", :unknown_function},
-  {"lib/aria_storage/repo.ex", :unknown_type},
-  {"lib/aria_storage/repo.ex", :callback_info_missing},
-
   # Utilities module uses IO functions dialyzer over-approximates.
   {"lib/parsers/casync_format/utilities.ex", :unknown_function},
 

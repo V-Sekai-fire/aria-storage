@@ -16,7 +16,7 @@ defmodule AriaStorage.MixProject do
       test_paths: ["test"],
       elixirc_paths: elixirc_paths(Mix.env()),
       dialyzer: [
-        plt_add_apps: [:ex_aws, :plug, :req, :waffle, :waffle_ecto, :finch, :ecto, :ecto_sql],
+        plt_add_apps: [:ex_aws, :plug, :req, :waffle, :finch],
         ignore_warnings: ".dialyzer_ignore.exs",
         list_unused_filters: true
       ]
@@ -29,9 +29,7 @@ defmodule AriaStorage.MixProject do
   def application do
     [
       extra_applications: [:logger, :crypto],
-      mod: {AriaStorage.Application, []},
-      # Explicitly list the repo for migrations for the aria_storage application
-      ecto_repos: [AriaStorage.Repo]
+      mod: {AriaStorage.Application, []}
     ]
   end
 
@@ -39,7 +37,6 @@ defmodule AriaStorage.MixProject do
     [
       # Storage and File Management
       {:waffle, "~> 1.1"},
-      {:waffle_ecto, "~> 0.0.11"},
       {:ex_aws, "~> 2.4"},
       {:ex_aws_s3, "~> 2.4"},
       {:sweet_xml, "~> 0.7"},
@@ -52,10 +49,6 @@ defmodule AriaStorage.MixProject do
 
       # JSON handling
       {:jason, "~> 1.4"},
-
-      # Database (for chunk metadata)
-      {:ecto_sql, "~> 3.13"},
-      {:postgrex, ">= 0.0.0"},
 
       # UUID Generation
       {:elixir_uuid, "~> 1.2"},

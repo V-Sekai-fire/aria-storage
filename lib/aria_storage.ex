@@ -105,11 +105,6 @@ defmodule AriaStorage do
   defdelegate list_chunks(store, opts \\ []), to: AriaStorage.ChunkStore
   defdelegate get_store_stats(store), to: AriaStorage.ChunkStore, as: :get_stats
 
-  # File Schema API
-  defdelegate file_changeset(file, attrs), to: AriaStorage.File, as: :changeset
-  defdelegate store_changeset(file, index_ref), to: AriaStorage.File
-  defdelegate fail_changeset(file, reason), to: AriaStorage.File
-
   @doc """
   Processes a file through the complete chunking and storage pipeline.
 
