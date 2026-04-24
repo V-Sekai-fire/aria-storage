@@ -22,3 +22,17 @@ aria_storage-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 lean/.lake/
+
+# SQLite runtime databases (created by Ecto at startup).
+*.db
+*.db-shm
+*.db-wal
+
+# Dialyzer persistent lookup tables.
+*.plt
+*.plt.hash
+.dialyzer/
+priv/plts/
+
+# Credo cache.
+.credo_cache/
