@@ -43,15 +43,24 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
 
     {opts, _rest, _invalid} =
       OptionParser.parse(args,
-        strict: [index: :string, store: :string, output: :string]
+        strict: [index: :string, store: :string, output: :string, cache: :string]
       )
 
     index_url = Keyword.get(opts, :index) || Mix.raise("--index URL is required")
     store_url = Keyword.get(opts, :store) || infer_store_url(index_url)
     output_dir = Keyword.get(opts, :output, File.cwd!())
 
+    cache_path =
+      Keyword.get(opts, :cache) ||
+        Path.join([
+          System.get_env("XDG_CACHE_HOME") || Path.join(System.user_home!(), ".cache"),
+          "casync",
+          "chunks"
+        ])
+
     Mix.shell().info("Index:  #{index_url}")
     Mix.shell().info("Store:  #{store_url}")
+    Mix.shell().info("Cache:  #{cache_path}")
     Mix.shell().info("Output: #{output_dir}")
 
     File.mkdir_p!(output_dir)
@@ -77,6 +86,7 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
 
     case AriaStorage.CasyncDecoder.decode_uri(index_url,
            store_uri: store_url,
+           cache_path: cache_path,
            output_dir: output_dir,
            verify_integrity: true,
            progress_callback: progress

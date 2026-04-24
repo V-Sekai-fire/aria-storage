@@ -216,6 +216,7 @@ defmodule AriaStorage.CasyncDecoder do
       output_name = opts[:output_name] || "assembled_file"
       assembled_file = Path.join(output_dir, output_name)
       store_context = get_store_context(opts)
+      cache_path = get_cache_path(opts)
       total_size = parsed_data.header.total_size
       feature_flags = parsed_data.feature_flags
 
@@ -247,7 +248,7 @@ defmodule AriaStorage.CasyncDecoder do
               fn chunk ->
                 chunk_id_hex = Base.encode16(chunk.chunk_id, case: :lower)
 
-                with {:ok, raw} <- fetch_chunk_data(chunk_id_hex, store_context),
+                with {:ok, raw} <- fetch_chunk_data(chunk_id_hex, store_context, cache_path),
                      {:ok, data} <-
                        decompress_and_verify_chunk(raw, chunk, chunk_id_hex, feature_flags) do
                   offsets = Map.fetch!(offsets_by_id, chunk.chunk_id)
@@ -345,19 +346,53 @@ defmodule AriaStorage.CasyncDecoder do
     end
   end
 
-  defp fetch_chunk_data(chunk_id_hex, store_context) do
-    case store_context do
-      {:local, store_path} ->
-        chunk_dir = String.slice(chunk_id_hex, 0, 4)
-        chunk_file = "#{chunk_id_hex}.cacnk"
-        chunk_path = Path.join([store_path, chunk_dir, chunk_file])
-        File.read(chunk_path)
-
-      {:remote, store_uri} ->
-        download_chunk(store_uri, chunk_id_hex)
-
+  defp get_cache_path(opts) do
+    case opts[:cache_path] do
       nil ->
-        {:error, :no_store_available}
+        base =
+          System.get_env("XDG_CACHE_HOME") ||
+            Path.join(System.user_home!(), ".cache")
+
+        Path.join([base, "casync", "chunks"])
+
+      path ->
+        path
+    end
+  end
+
+  defp chunk_local_path(dir, chunk_id_hex) do
+    Path.join([dir, String.slice(chunk_id_hex, 0, 4), "#{chunk_id_hex}.cacnk"])
+  end
+
+  defp fetch_chunk_data(chunk_id_hex, store_context, cache_path) do
+    cached = chunk_local_path(cache_path, chunk_id_hex)
+
+    case File.read(cached) do
+      {:ok, data} ->
+        {:ok, data}
+
+      {:error, _} ->
+        result =
+          case store_context do
+            {:local, store_path} ->
+              File.read(chunk_local_path(store_path, chunk_id_hex))
+
+            {:remote, store_uri} ->
+              download_chunk(store_uri, chunk_id_hex)
+
+            nil ->
+              {:error, :no_store_available}
+          end
+
+        case result do
+          {:ok, data} ->
+            File.mkdir_p!(Path.dirname(cached))
+            File.write(cached, data)
+            {:ok, data}
+
+          error ->
+            error
+        end
     end
   end
 
