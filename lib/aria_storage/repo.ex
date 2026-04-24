@@ -4,8 +4,5 @@
 defmodule AriaStorage.Repo do
   use Ecto.Repo,
     otp_app: :aria_storage,
-    adapter: Ecto.Adapters.SQLite3
-
-  # @impl true
-  # def migrations(), do: [] # Placeholder, will be updated
+    adapter: Ecto.Adapters.Postgres
 end

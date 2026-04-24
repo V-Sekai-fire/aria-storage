@@ -55,7 +55,7 @@ defmodule AriaStorage.MixProject do
 
       # Database (for chunk metadata)
       {:ecto_sql, "~> 3.13"},
-      {:ecto_sqlite3, "~> 0.22.0"},
+      {:postgrex, ">= 0.0.0"},
 
       # UUID Generation
       {:elixir_uuid, "~> 1.2"},

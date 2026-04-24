@@ -3,12 +3,11 @@
 
 import Config
 
-# Configure AriaStorage.Repo to use FoundationDB
 config :aria_storage, AriaStorage.Repo,
-  adapter: Ecto.Adapters.FoundationDB,
-  database: "aria_storage.fdb", # Using a placeholder name, actual naming might depend on tenant strategy
-  cluster_file: "/etc/foundationdb/fdb.cluster", # Explicitly pointing to the cluster file
-  pool_size: 5,
-  pool: EctoFoundationDB.Sandbox # Using FDB sandbox for test transactions
-# Ensure environment variables do not override these settings for tests
-config :aria_storage, AriaStorage.Repo, system_env_variable: false
+  url:
+    System.get_env(
+      "TEST_DATABASE_URL",
+      "postgresql://root@localhost:26257/aria_storage_test?sslmode=disable"
+    ),
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: 5
