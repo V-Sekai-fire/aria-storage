@@ -46,8 +46,14 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
         strict: [index: :string, store: :string, output: :string, cache: :string]
       )
 
-    index_url = Keyword.get(opts, :index) || Mix.raise("--index URL is required")
-    store_url = Keyword.get(opts, :store) || infer_store_url(index_url)
+    index_url =
+      (Keyword.get(opts, :index) || Mix.raise("--index URL is required"))
+      |> normalize_github_url()
+
+    store_url =
+      (Keyword.get(opts, :store) || infer_store_url(index_url))
+      |> normalize_github_url()
+
     output_dir = Keyword.get(opts, :output, File.cwd!())
 
     cache_path = Keyword.get(opts, :cache) || AriaStorage.CasyncDecoder.default_cache_path()
@@ -101,6 +107,37 @@ defmodule Mix.Tasks.AriaStorage.Fetch do
 
       {:error, reason} ->
         Mix.raise("aria_storage.fetch failed: #{inspect(reason)}")
+    end
+  end
+
+  # Rewrite github.com blob/tree/raw paths → raw.githubusercontent.com so
+  # Req receives a direct binary download rather than an HTML page or a 404.
+  #   github.com/{owner}/{repo}/blob/{ref}/{path}  → raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}
+  #   github.com/{owner}/{repo}/tree/{ref}/{path}  → raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}
+  #   github.com/{owner}/{repo}/raw/{ref}/{path}   → raw.githubusercontent.com/{owner}/{repo}/{ref}/{path}
+  defp normalize_github_url(url) do
+    uri = URI.parse(url)
+
+    case uri do
+      %URI{host: "github.com", path: path} when is_binary(path) ->
+        case Regex.run(~r{^(/[^/]+/[^/]+)/(blob|tree|raw)/(.+)$}, path) do
+          [_, repo_path, _verb, rest] ->
+            raw = %URI{
+              scheme: "https",
+              host: "raw.githubusercontent.com",
+              path: "#{repo_path}/#{rest}"
+            }
+
+            raw_url = URI.to_string(raw)
+            Mix.shell().info("(normalized GitHub URL → #{raw_url})")
+            raw_url
+
+          nil ->
+            url
+        end
+
+      _ ->
+        url
     end
   end
 
