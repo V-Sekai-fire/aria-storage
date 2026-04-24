@@ -33,6 +33,9 @@ defmodule AriaStorage.CasyncDecoder do
   @doc "Decode a casync file from a local file path.\n"
   @spec decode_file(String.t(), decode_options()) :: {:ok, decode_result()} | {:error, any()}
   def decode_file(file_path, opts \\ []) do
+    output_name = file_path |> Path.basename() |> Path.rootname()
+    opts = Keyword.put_new(opts, :output_name, output_name)
+
     with {:ok, binary_data} <- File.read(file_path),
          {:ok, parsed_data} <- parse_casync_data(binary_data, file_path) do
       result = %{
@@ -68,6 +71,11 @@ defmodule AriaStorage.CasyncDecoder do
   @doc "Decode a casync file from a remote URI.\n"
   @spec decode_uri(String.t(), decode_options()) :: {:ok, decode_result()} | {:error, any()}
   def decode_uri(file_uri, opts \\ []) do
+    output_name =
+      file_uri |> URI.parse() |> Map.get(:path, "") |> Path.basename() |> Path.rootname()
+
+    opts = Keyword.put_new(opts, :output_name, output_name)
+
     with {:ok, binary_data} <- download_file(file_uri),
          {:ok, parsed_data} <- parse_casync_data(binary_data, file_uri) do
       result = %{
@@ -200,38 +208,75 @@ defmodule AriaStorage.CasyncDecoder do
   end
 
   defp assemble_from_chunks(parsed_data, opts, output_dir, progress_callback) do
-    if Enum.empty?(parsed_data.chunks) do
+    chunks = parsed_data.chunks
+
+    if Enum.empty?(chunks) do
       {:error, :no_chunks_to_assemble}
     else
-      sorted_chunks = Enum.sort_by(parsed_data.chunks, & &1.offset)
-      assembled_file = Path.join(output_dir, "assembled_file.bin")
-
+      output_name = opts[:output_name] || "assembled_file"
+      assembled_file = Path.join(output_dir, output_name)
       store_context = get_store_context(opts)
+      total_size = parsed_data.header.total_size
+      feature_flags = parsed_data.feature_flags
 
-      case File.open(assembled_file, [:write, :binary], fn file ->
-             assemble_chunks_to_file(
-               file,
-               sorted_chunks,
-               store_context,
-               0,
-               0,
-               progress_callback,
-               parsed_data.feature_flags
-             )
-           end) do
-        {:ok, {success_count, total_bytes_written}} ->
+      concurrency =
+        case store_context do
+          {:remote, _} -> 16
+          _ -> System.schedulers_online()
+        end
+
+      unique_chunks = Enum.uniq_by(chunks, & &1.chunk_id)
+      total_unique = length(unique_chunks)
+
+      offsets_by_id =
+        Enum.reduce(chunks, %{}, fn chunk, acc ->
+          Map.update(acc, chunk.chunk_id, [chunk.offset], &[chunk.offset | &1])
+        end)
+
+      done_counter = :atomics.new(1, [])
+      if progress_callback, do: progress_callback.(0, total_unique)
+
+      case :file.open(assembled_file, [:write, :binary]) do
+        {:ok, file} ->
+          if total_size > 0, do: :file.pwrite(file, total_size - 1, <<0>>)
+
+          {success_count, total_bytes} =
+            unique_chunks
+            |> Task.async_stream(
+              fn chunk ->
+                chunk_id_hex = Base.encode16(chunk.chunk_id, case: :lower)
+
+                with {:ok, raw} <- fetch_chunk_data(chunk_id_hex, store_context),
+                     {:ok, data} <-
+                       decompress_and_verify_chunk(raw, chunk, chunk_id_hex, feature_flags) do
+                  offsets = Map.fetch!(offsets_by_id, chunk.chunk_id)
+                  Enum.each(offsets, &:file.pwrite(file, &1, data))
+                  n = :atomics.add_get(done_counter, 1, 1)
+                  if progress_callback && rem(n, 10) == 0, do: progress_callback.(n, total_unique - n)
+                  {:ok, length(offsets), byte_size(data) * length(offsets)}
+                end
+              end,
+              max_concurrency: concurrency,
+              ordered: false,
+              timeout: 300_000
+            )
+            |> Enum.reduce({0, 0}, fn
+              {:ok, {:ok, n, bytes}}, {tc, tb} -> {tc + n, tb + bytes}
+              _, acc -> acc
+            end)
+
+          :file.close(file)
+
           case File.stat(assembled_file) do
             {:ok, %{size: actual_size}} ->
-              verification_passed = actual_size == parsed_data.header.total_size
-
               {:ok,
                %{
                  success: true,
                  assembled_file: assembled_file,
-                 bytes_written: total_bytes_written,
+                 bytes_written: total_bytes,
                  chunks_processed: success_count,
-                 verification_passed: verification_passed,
-                 size_verified: verification_passed
+                 verification_passed: actual_size == total_size,
+                 size_verified: actual_size == total_size
                }}
 
             {:error, reason} ->
@@ -296,94 +341,6 @@ defmodule AriaStorage.CasyncDecoder do
       opts[:store_uri] -> {:remote, opts[:store_uri]}
       opts[:store_path] -> {:local, opts[:store_path]}
       true -> nil
-    end
-  end
-
-  defp assemble_chunks_to_file(
-         file,
-         chunks,
-         store_context,
-         success_count,
-         total_bytes,
-         progress_callback,
-         feature_flags
-       ) do
-    total_chunks = length(chunks)
-
-    case chunks do
-      [] ->
-        {success_count, total_bytes}
-
-      [chunk | remaining_chunks] ->
-        if progress_callback && rem(success_count, 10) == 0 do
-          progress_callback.(success_count, total_chunks)
-        end
-
-        chunk_id_hex = Base.encode16(chunk.chunk_id, case: :lower)
-
-        case fetch_chunk_data(chunk_id_hex, store_context) do
-          {:ok, chunk_data} ->
-            case decompress_and_verify_chunk(chunk_data, chunk, chunk_id_hex, feature_flags) do
-              {:ok, decompressed_data} ->
-                case :file.write(file, decompressed_data) do
-                  :ok ->
-                    assemble_chunks_to_file(
-                      file,
-                      remaining_chunks,
-                      store_context,
-                      success_count + 1,
-                      total_bytes + byte_size(decompressed_data),
-                      progress_callback,
-                      feature_flags
-                    )
-
-                  {:error, reason} ->
-                    Logger.debug(
-                      "Failed to write chunk #{String.slice(chunk_id_hex, 0, 8)}: #{inspect(reason)}"
-                    )
-
-                    assemble_chunks_to_file(
-                      file,
-                      remaining_chunks,
-                      store_context,
-                      success_count,
-                      total_bytes,
-                      progress_callback,
-                      feature_flags
-                    )
-                end
-
-              {:error, reason} ->
-                Logger.debug(
-                  "Chunk #{String.slice(chunk_id_hex, 0, 8)} verification failed: #{inspect(reason)}"
-                )
-
-                assemble_chunks_to_file(
-                  file,
-                  remaining_chunks,
-                  store_context,
-                  success_count,
-                  total_bytes,
-                  progress_callback,
-                  feature_flags
-                )
-            end
-
-          {:error, reason} ->
-            Logger.debug(
-              "Chunk #{String.slice(chunk_id_hex, 0, 8)} not found: #{inspect(reason)}"
-            )
-
-            assemble_chunks_to_file(
-              file,
-              remaining_chunks,
-              store_context,
-              success_count,
-              total_bytes,
-              progress_callback,
-              feature_flags
-            )
-        end
     end
   end
 
