@@ -21,6 +21,11 @@
   {"lib/mix/tasks/aria_storage.fetch.ex", :unknown_function},
   # Mix.Task.run/1 raises via Mix.raise when --index missing — by design.
   {"lib/mix/tasks/aria_storage.fetch.ex", :no_return},
+  # URI.to_string with authority:nil — valid per URI.authority() = nil | binary().
+  {"lib/mix/tasks/aria_storage.fetch.ex", :call_without_opaque},
+  # Mix.Task behaviour, Mix.raise/1, Mix.shell/0 not in PLT.
+  {"lib/mix/tasks/aria_storage.make.ex", :callback_info_missing},
+  {"lib/mix/tasks/aria_storage.make.ex", :unknown_function},
 
   # Waffle macros generate functions dialyzer cannot see.
   {"lib/waffle_adapter.ex", :unknown_function},

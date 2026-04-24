@@ -4,8 +4,8 @@
 defmodule AriaStorage.ChunkOrderTest do
   use ExUnit.Case
 
-  alias AriaStorage.Chunks.Core, as: ChunksCore
   alias AriaStorage.CasyncDecoder
+  alias AriaStorage.Chunks.Core, as: ChunksCore
   alias AriaStorage.Parsers.CasyncFormat
 
   @moduledoc """
