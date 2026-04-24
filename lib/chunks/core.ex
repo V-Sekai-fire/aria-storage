@@ -144,7 +144,7 @@ defmodule AriaStorage.Chunks.Core do
                []
              )
 
-           {:ok, Enum.reverse(chunks)}
+           {:ok, chunks}
          end) do
       {:ok, result} -> result
       {:error, reason} -> {:error, {:file_open, reason}}
