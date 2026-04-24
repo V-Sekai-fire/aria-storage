@@ -221,15 +221,15 @@ defmodule AriaStorage.CasyncDecoder do
 
       concurrency =
         case store_context do
-          {:remote, _} -> 16
+          {:remote, _} -> 64
           _ -> System.schedulers_online()
         end
 
       {unique_chunks, offsets_by_id} =
         Enum.reduce(chunks, {[], %{}}, fn chunk, {uniq, offsets} ->
+          is_new = not Map.has_key?(offsets, chunk.chunk_id)
           updated = Map.update(offsets, chunk.chunk_id, [chunk.offset], &[chunk.offset | &1])
-          new_uniq = if map_size(updated) > map_size(offsets), do: [chunk | uniq], else: uniq
-          {new_uniq, updated}
+          {if(is_new, do: [chunk | uniq], else: uniq), updated}
         end)
 
       total_unique = length(unique_chunks)
