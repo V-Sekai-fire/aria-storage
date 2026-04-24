@@ -55,7 +55,6 @@ defmodule AriaStorage.MixProject do
       {:porcelain, "~> 2.0"},
 
       # Development and testing tools
-      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.31", only: :dev, runtime: false},
       {:stream_data, "~> 1.2", only: :test},
