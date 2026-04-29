@@ -36,3 +36,4 @@ priv/plts/
 
 # Credo cache.
 .credo_cache/
+.DS_Store
