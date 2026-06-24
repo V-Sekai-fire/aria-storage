@@ -52,7 +52,6 @@ defmodule AriaStorage.MixProject do
 
       # UUID Generation
       {:elixir_uuid, "~> 1.2"},
-      {:porcelain, "~> 2.0"},
 
       # Development and testing tools
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},

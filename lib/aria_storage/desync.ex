@@ -9,8 +9,6 @@ defmodule AriaStorage.Desync do
   for content-defined chunking, indexing, and file assembly.
   """
 
-  alias Porcelain
-
   @desync_command "desync"
 
   @doc """
@@ -91,13 +89,10 @@ defmodule AriaStorage.Desync do
     execute_desync(args)
   end
 
-  # Executes the desync command using Porcelain
   defp execute_desync(args) do
-    case Porcelain.exec(@desync_command, args) do
-      %Porcelain.Result{status: 0, out: stdout} ->
-        {:ok, String.trim(stdout)}
-      %Porcelain.Result{status: status, err: stderr} ->
-        {:error, "desync command failed with exit status #{status}: #{String.trim(stderr)}"}
+    case System.cmd(@desync_command, args, stderr_to_stdout: true) do
+      {output, 0} -> {:ok, String.trim(output)}
+      {output, status} -> {:error, "desync command failed with exit status #{status}: #{String.trim(output)}"}
     end
   end
 

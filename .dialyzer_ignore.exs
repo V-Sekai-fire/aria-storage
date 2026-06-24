@@ -10,9 +10,6 @@
   {"lib/aria_storage/chunk_server_plug.ex", :callback_info_missing},
   {"lib/aria_storage/chunk_server_plug.ex", :unknown_function},
 
-  # Porcelain.exec/2 not specced in PLT.
-  {"lib/aria_storage/desync.ex", :unknown_function},
-
   # Req.get/2 not resolved despite :req in plt_add_apps.
   {"lib/casync_decoder.ex", :unknown_function},
 
