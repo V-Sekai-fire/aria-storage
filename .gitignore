@@ -32,7 +32,7 @@ lean/.lake/
 *.plt
 *.plt.hash
 .dialyzer/
-priv/plts/
+priv/
 
 # Credo cache.
 .credo_cache/
