@@ -66,12 +66,10 @@ defmodule AriaStorage.Parsers.CasyncFormat.Encoder do
     end
   end
 
-  @doc "Encode chunk data to binary format (CACNK).\n\nCreates a CACNK file with proper magic bytes and header information.\n"
+  @doc "Encode chunk data to binary format (CACNK).\n\nWrites raw zstd-compressed bytes — the format desync/casync expect.\nNo custom magic or header; the chunk ID (filename) is the hash of the\nuncompressed content.\n"
   @spec encode_chunk(map()) :: encode_result()
-  def encode_chunk(%{header: header, data: data}) do
-    magic = <<202, 196, 78>>
-    encoded_header = encode_chunk_header(header)
-    {:ok, magic <> encoded_header <> data}
+  def encode_chunk(%{data: data}) do
+    {:ok, data}
   end
 
   @doc "Encode archive data to binary format (CATAR).\n\nSupports encoding from elements structure for full compatibility\nwith casync/desync CATAR format.\n"
@@ -103,32 +101,6 @@ defmodule AriaStorage.Parsers.CasyncFormat.Encoder do
 
   def encode_archive(%{format: :catar}) do
     {:error, "CATAR format encoding requires 'elements' field"}
-  end
-
-  @spec encode_chunk_header(Constants.chunk_header()) :: binary()
-  defp encode_chunk_header(%{
-         compressed_size: compressed_size,
-         uncompressed_size: uncompressed_size,
-         compression: compression,
-         flags: flags
-       }) do
-    compression_type = encode_compression_type(compression)
-
-    <<compressed_size::little-32>> <>
-      <<uncompressed_size::little-32>> <> <<compression_type::little-32>> <> <<flags::little-32>>
-  end
-
-  defp encode_chunk_header(%{}) do
-    <<0::little-32, 0::little-32, 0::little-32, 0::little-32>>
-  end
-
-  @spec encode_compression_type(Constants.compression_type()) :: non_neg_integer()
-  defp encode_compression_type(compression) do
-    case compression do
-      :none -> Constants.compression_none()
-      :zstd -> Constants.compression_zstd()
-      :unknown -> Constants.compression_none()
-    end
   end
 
   @spec encode_catar_element(Constants.catar_element()) :: binary()
