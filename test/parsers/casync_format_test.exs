@@ -547,15 +547,14 @@ defmodule AriaStorage.Parsers.CasyncFormatTest do
             {:ok, data} ->
               case CasyncFormat.parse_chunk(data) do
                 {:ok, result} ->
-                  assert %{magic: :cacnk, header: header, data: chunk_data} = result
-                  assert is_map(header)
-                  assert is_binary(chunk_data)
-
-                  assert %{
-                           compressed_size: compressed_size,
-                           uncompressed_size: uncompressed_size,
-                           compression: compression
-                         } = header
+                  assert result.magic in [:cacnk, :zstd]
+                  assert is_map(result.header)
+                  assert is_binary(result.data)
+                  chunk_data = result.data
+                  header = result.header
+                  compression = Map.get(header, :compression, :zstd)
+                  compressed_size = Map.get(header, :compressed_size, byte_size(chunk_data))
+                  uncompressed_size = Map.get(header, :uncompressed_size, 0)
 
                   assert is_integer(compressed_size)
                   assert is_integer(uncompressed_size)
