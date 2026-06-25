@@ -329,51 +329,26 @@ defmodule AriaStorage.Parsers.CasyncFormatRoundtripTest do
   end
 
   describe("chunk file roundtrip tests") do
-    test "synthetic cacnk data roundtrip is bit-exact" do
-      cacnk_data = create_cacnk_test_data()
-      assert {:ok, parsed} = CasyncFormat.parse_chunk(cacnk_data)
-      assert parsed.magic == :cacnk
+    test "desync-format cacnk data roundtrip is bit-exact" do
+      raw_zstd = IO.iodata_to_binary(:zstd.compress("test chunk content for desync-compatible roundtrip"))
+      assert {:ok, parsed} = CasyncFormat.parse_chunk(raw_zstd)
+      assert parsed.magic == :zstd
       assert {:ok, re_encoded_data} = CasyncFormat.encode_chunk(parsed)
-      assert cacnk_data == re_encoded_data, "Re-encoded CACNK data does not match original"
+      assert raw_zstd == re_encoded_data, "Re-encoded CACNK data does not match original"
     end
 
-    test "various compression types roundtrip correctly" do
+    test "legacy custom format still parses compression types correctly" do
       compression_cases = [{0, :none}, {1, :zstd}]
+      magic = <<202, 196, 78>>
 
       Enum.each(compression_cases, fn {compression_type, compression_atom} ->
-        magic = <<202, 196, 78>>
-        compressed_size = 75
-        uncompressed_size = 150
-        flags = 0
-
         header =
-          <<compressed_size::little-32, uncompressed_size::little-32, compression_type::little-32,
-            flags::little-32>>
+          <<75::little-32, 150::little-32, compression_type::little-32, 0::little-32>>
 
-        data = :crypto.strong_rand_bytes(compressed_size)
-        original_data = magic <> header <> data
+        original_data = magic <> header <> :crypto.strong_rand_bytes(75)
         assert {:ok, parsed} = CasyncFormat.parse_chunk(original_data)
         assert parsed.header.compression == compression_atom
-        assert {:ok, re_encoded_data} = CasyncFormat.encode_chunk(parsed)
-
-        assert original_data == re_encoded_data,
-               "Re-encoded CACNK data with compression #{compression_atom} does not match original"
       end)
-    end
-
-    defp create_cacnk_test_data do
-      magic = <<202, 196, 78>>
-      compressed_size = 100
-      uncompressed_size = 200
-      compression_type = 1
-      flags = 0
-
-      header =
-        <<compressed_size::little-32, uncompressed_size::little-32, compression_type::little-32,
-          flags::little-32>>
-
-      data = :crypto.strong_rand_bytes(100)
-      magic <> header <> data
     end
 
     test "processes available cacnk files for roundtrip accuracy" do
@@ -534,9 +509,6 @@ defmodule AriaStorage.Parsers.CasyncFormatRoundtripTest do
   end
 
   defp create_synthetic_chunk do
-    magic = <<202, 196, 78>>
-    header = <<100::little-32>> <> <<100::little-32>> <> <<0::little-32>> <> <<0::little-32>>
-    data = :crypto.strong_rand_bytes(100)
-    magic <> header <> data
+    IO.iodata_to_binary(:zstd.compress(:crypto.strong_rand_bytes(100)))
   end
 end

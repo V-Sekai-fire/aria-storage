@@ -11,6 +11,11 @@ defmodule AriaStorage.Parsers.CasyncFormat.ChunkParser do
   @spec parse_chunk(binary()) :: parse_result()
   def parse_chunk(binary_data) when is_binary(binary_data) do
     case binary_data do
+      # Desync-compatible format: raw zstd frame (magic 0x28 0xB5 0x2F 0xFD)
+      <<0x28, 0xB5, 0x2F, 0xFD, _::binary>> ->
+        {:ok, %{magic: :zstd, header: %{compression: :zstd}, data: binary_data}}
+
+      # Old aria_storage proprietary format (kept for reading legacy files)
       <<202, 196, 78, compressed_size::little-32, uncompressed_size::little-32,
         compression_type::little-32, flags::little-32, remaining_data::binary>> ->
         compression = decode_compression_type(compression_type)
@@ -22,8 +27,7 @@ defmodule AriaStorage.Parsers.CasyncFormat.ChunkParser do
           flags: flags
         }
 
-        result = %{magic: :cacnk, header: header, data: remaining_data}
-        {:ok, result}
+        {:ok, %{magic: :cacnk, header: header, data: remaining_data}}
 
       _ ->
         {:error, "Invalid chunk file magic"}
